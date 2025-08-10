@@ -7,7 +7,17 @@ const metricsRoutes = require("./routes/metrics");
 const historyRoutes = require("./routes/history");
 
 const app = express();
-app.use(cors());
+
+// CORS: si defines CORS_ORIGIN, restringe a ese origen; si no, permite todos (útil en local)
+const corsOrigin = process.env.CORS_ORIGIN;
+app.use(
+    cors(
+        corsOrigin
+            ? { origin: corsOrigin, credentials: true }
+            : { origin: true, credentials: true }
+    )
+);
+
 app.use(express.json());
 app.use(morgan("dev"));
 
@@ -19,5 +29,5 @@ app.use("/api/history", historyRoutes);
 
 const PORT = process.env.PORT || 5050;
 app.listen(PORT, () => {
-  console.log(`Backend listening on port ${PORT}`);
+    console.log(`Backend listening on port ${PORT}`);
 });
