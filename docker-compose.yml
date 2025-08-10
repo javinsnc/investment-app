@@ -10,21 +10,39 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d investment -h 127.0.0.1"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+      start_period: 5s
 
   backend:
     build: ./backend
-    depends_on:
-      - db
     environment:
       DATABASE_URL: postgres://app:app@db:5432/investment
       PORT: "5050"
+      # Si usas SSL en otra plataforma:
+      # DB_SSL: "true"
+      # DB_SSL_REJECT_UNAUTHORIZED: "false"
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - "5050:5050"
+    healthcheck:
+      # node:alpine trae wget (busybox). Si prefieres curl, instálalo en el Dockerfile.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5050/api/health >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 2s
+      retries: 20
+      start_period: 5s
 
   frontend:
     build: ./frontend
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
       - "80:80"
 

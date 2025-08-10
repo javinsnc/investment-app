@@ -31,7 +31,6 @@ export default function AssetsTable({ assets }) {
               const currentValue = asset.current_value != null ? Number(asset.current_value) : (currentPrice != null ? currentPrice * qty : null);
               const pnlAbs = asset.pnl_abs != null ? Number(asset.pnl_abs) : (currentPrice != null ? (currentPrice - price) * qty : null);
               const pnlPct = asset.pnl_pct != null ? Number(asset.pnl_pct) : (currentPrice != null && price > 0 ? ((currentPrice - price) / price) * 100 : null);
-
               return (
                 <tr key={asset.id} className="odd:bg-white even:bg-gray-50">
                   <td className="p-2 border">{asset.name}</td>
@@ -42,20 +41,14 @@ export default function AssetsTable({ assets }) {
                   <td className="p-2 border text-right">{currentPrice != null ? formatByType(asset.type, currentPrice) : "—"}</td>
                   <td className="p-2 border text-right">{fmtCurrency.format(invested)}</td>
                   <td className="p-2 border text-right">{currentValue != null ? fmtCurrency.format(currentValue) : "—"}</td>
-                  <td className={`p-2 border text-right ${pnlAbs >= 0 ? "text-green-600" : "text-red-600"}`}>
-                    {pnlAbs != null ? fmtCurrency.format(pnlAbs) : "—"}
-                  </td>
-                  <td className={`p-2 border text-right ${pnlPct >= 0 ? "text-green-600" : "text-red-600"}`}>
-                    {pnlPct != null ? `${pnlPct.toFixed(2)}%` : "—"}
-                  </td>
+                  <td className={`p-2 border text-right ${pnlAbs >= 0 ? "text-green-600" : "text-red-600"}`}>{pnlAbs != null ? fmtCurrency.format(pnlAbs) : "—"}</td>
+                  <td className={`p-2 border text-right ${pnlPct >= 0 ? "text-green-600" : "text-red-600"}`}>{pnlPct != null ? `${pnlPct.toFixed(2)}%` : "—"}</td>
                 </tr>
               );
             })}
             {assets.length === 0 && (
               <tr>
-                <td className="p-3 text-center text-gray-500" colSpan={10}>
-                  {t("noAssets")}
-                </td>
+                <td className="p-3 text-center text-gray-500" colSpan={10}>{t("noAssets")}</td>
               </tr>
             )}
           </tbody>

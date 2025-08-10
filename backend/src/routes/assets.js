@@ -2,49 +2,28 @@ const express = require("express");
 const router = express.Router();
 const db = require("../db");
 
-// Create asset
-router.post("/", async (req, res) => {
-  const { name, ticker, type, purchase_date, purchase_price, quantity } = req.body;
-  try {
-    const result = await db.query(
-      `INSERT INTO assets (name, ticker, type, purchase_date, purchase_price, quantity)
-       VALUES ($1,$2,$3,$4,$5,$6)
-       RETURNING *`,
-      [name, ticker, type, purchase_date, purchase_price, quantity]
-    );
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error("Create asset error", err);
-    res.status(500).json({ error: "Failed to create asset" });
-  }
-});
-
-// List assets with per-asset metrics (latest price)
 router.get("/", async (_req, res) => {
   try {
     const q = `
-      SELECT
-        a.*,
-        (a.purchase_price * a.quantity) AS invested,
-        lp.closing_price AS current_price,
-        CASE WHEN lp.closing_price IS NOT NULL
-             THEN lp.closing_price * a.quantity
-             ELSE NULL END AS current_value,
-        CASE WHEN lp.closing_price IS NOT NULL
-             THEN (lp.closing_price - a.purchase_price) * a.quantity
-             ELSE NULL END AS pnl_abs,
-        CASE WHEN lp.closing_price IS NOT NULL AND a.purchase_price > 0
-             THEN ((lp.closing_price - a.purchase_price) / a.purchase_price) * 100
-             ELSE NULL END AS pnl_pct
-      FROM assets a
-      LEFT JOIN LATERAL (
-        SELECT p.closing_price
+      WITH last_price AS (
+        SELECT p.ticker, p.closing_price
         FROM prices p
-        WHERE p.asset_id = a.id
-        ORDER BY p.date DESC
-        LIMIT 1
-      ) lp ON TRUE
-      ORDER BY a.id;
+        JOIN (
+          SELECT ticker, MAX(date) AS md FROM prices GROUP BY ticker
+        ) m ON m.ticker = p.ticker AND m.md = p.date
+      )
+      SELECT
+        ca.id, ca.name, ca.ticker, ca.asset_type AS type,
+        ca.quantity, ca.average_price AS purchase_price,
+        (ca.average_price * ca.quantity) AS invested,
+        lp.closing_price AS current_price,
+        CASE WHEN lp.closing_price IS NOT NULL THEN lp.closing_price * ca.quantity END AS current_value,
+        CASE WHEN lp.closing_price IS NOT NULL THEN (lp.closing_price - ca.average_price) * ca.quantity END AS pnl_abs,
+        CASE WHEN lp.closing_price IS NOT NULL AND ca.average_price > 0
+             THEN ((lp.closing_price - ca.average_price)/ca.average_price)*100 END AS pnl_pct
+      FROM current_assets ca
+      LEFT JOIN last_price lp ON lp.ticker = ca.ticker
+      ORDER BY ca.ticker;
     `;
     const { rows } = await db.query(q);
     res.json(rows);

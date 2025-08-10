@@ -11,14 +11,8 @@ function PieTooltip({ active, payload, total }) {
   return (
     <div className="bg-white/95 backdrop-blur-sm shadow-lg rounded px-3 py-2 text-sm border">
       <div className="font-medium">{p.name}</div>
-      <div>
-        <span className="text-gray-500">{t("invested")}&nbsp;</span>
-        <span className="font-semibold">{fmtCurrency.format(value)}</span>
-      </div>
-      <div>
-        <span className="text-gray-500">{t("ofPortfolio")}&nbsp;</span>
-        <span className="font-semibold">{percent.toFixed(2)}%</span>
-      </div>
+      <div><span className="text-gray-500">{t("invested")}&nbsp;</span><span className="font-semibold">{fmtCurrency.format(value)}</span></div>
+      <div><span className="text-gray-500">{t("ofPortfolio")}&nbsp;</span><span className="font-semibold">{percent.toFixed(2)}%</span></div>
     </div>
   );
 }
@@ -34,9 +28,7 @@ function RightLegend({ data, colors, total }) {
               <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: colors[i % colors.length] }} />
               <span className="text-sm">{d.name}</span>
             </div>
-            <div className="text-sm tabular-nums">
-              {percent.toFixed(1)}% · {fmtCurrencyCompact.format(d.value)}
-            </div>
+            <div className="text-sm tabular-nums">{percent.toFixed(1)}% · {fmtCurrencyCompact.format(d.value)}</div>
           </div>
         );
       })}
@@ -45,21 +37,12 @@ function RightLegend({ data, colors, total }) {
 }
 
 export default function DistributionPie({ assets }) {
-  const distribution = useMemo(
-    () =>
-      assets.map((a) => ({
-        name: a.ticker,
-        value: Number(a.purchase_price) * Number(a.quantity),
-        type: a.type,
-      })),
-    [assets]
-  );
+  const distribution = useMemo(() => assets.map(a => ({ name: a.ticker, value: Number(a.purchase_price) * Number(a.quantity), type: a.type })), [assets]);
   const total = useMemo(() => distribution.reduce((acc, d) => acc + (d.value || 0), 0), [distribution]);
 
   return (
     <div className="bg-white shadow-sm border border-gray-100 p-4 rounded-2xl">
       <h2 className="text-lg font-semibold mb-2 text-center">{t("distributionByAsset")}</h2>
-
       <div className="w-full flex flex-col lg:flex-row items-center gap-6">
         <div className="w-full lg:w-[65%]">
           <ResponsiveContainer width="100%" height={360}>
@@ -78,37 +61,16 @@ export default function DistributionPie({ assets }) {
                   );
                 })}
               </defs>
-
-              <Pie
-                data={distribution}
-                dataKey="value"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                outerRadius={140}
-                paddingAngle={2}
-                isAnimationActive={true}
-                labelLine={false}
-                label={({ name }) => name}
-              >
+              <Pie data={distribution} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={140} paddingAngle={2} isAnimationActive={true} labelLine={false} label={({ name }) => name}>
                 {distribution.map((entry, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={`url(#grad-${index})`}
-                    stroke="rgba(0,0,0,0.06)"
-                    strokeWidth={1}
-                  />
+                  <Cell key={`cell-${index}`} fill={`url(#grad-${index})`} stroke="rgba(0,0,0,0.06)" strokeWidth={1} />
                 ))}
               </Pie>
-
               <PieTooltipCore content={<PieTooltip total={total} />} />
             </PieChart>
           </ResponsiveContainer>
         </div>
-
-        <div className="w-full lg:w-[35%]">
-          <RightLegend data={distribution} colors={PIE_COLORS} total={total} />
-        </div>
+        <div className="w-full lg:w-[35%]"><RightLegend data={distribution} colors={PIE_COLORS} total={total} /></div>
       </div>
     </div>
   );
