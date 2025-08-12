@@ -15,14 +15,6 @@ function parseDateFlex(s){
     return isNaN(dt2) ? null : startOfDay(dt2);
 }
 
-// Europe/Madrid: ayer hábil (si sábado/domingo, retrocede)
-function getPrevBusinessDayEuropeMadrid() {
-    const now = new Date();
-    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1);
-    return startOfDay(d);
-}
-
 // "1.234,56" / "1,234.56" / "1234,56" -> Number
 function parseLocaleNumber(text){
     if(text==null) return null;
@@ -81,10 +73,15 @@ function parseFT(html){
 }
 
 // ---------- Servicio principal ----------
-const TOLERANCE_DAYS = 5;
+const TOLERANCE_DAYS_BACK = 14; // aceptamos datos hasta 2 semanas hacia atrás
+// A partir de ahora aceptamos fechas **hasta hoy** (no solo “ayer hábil”)
+function todayISO(){ return toISODate(startOfDay(new Date())); }
 
 /**
  * Ejecuta la actualización de últimos precios.
+ * - Consulta ambos orígenes (QF y FT)
+ * - Elige el candidato con **fecha más reciente** (hasta hoy)
+ * - Inserta si es estrictamente **más nuevo** que lo último en DB
  * @param {Object} opts
  * @param {string=} opts.ticker ISIN opcional para actualizar solo ese fondo
  * @param {Function=} opts.log función de log (por defecto console.log)
@@ -93,11 +90,10 @@ const TOLERANCE_DAYS = 5;
 async function runUpdateLastPrices({ ticker = "", log = console.log } = {}) {
     const report = { checked: 0, updated: 0, skipped: 0, errors: [] };
 
-    const target = getPrevBusinessDayEuropeMadrid();
-    const targetISO = toISODate(target);
-    const minAccepted = new Date(target);
-    minAccepted.setDate(minAccepted.getDate() - (TOLERANCE_DAYS - 1));
-    const minISO = toISODate(minAccepted);
+    const maxISO = todayISO(); // límite superior = hoy
+    const minDate = new Date(startOfDay(new Date()));
+    minDate.setDate(minDate.getDate() - (TOLERANCE_DAYS_BACK - 1));
+    const minISO = toISODate(minDate);
 
     try {
         // Selección de fondos a revisar
@@ -120,7 +116,7 @@ async function runUpdateLastPrices({ ticker = "", log = console.log } = {}) {
          LEFT JOIN lp ON lp.ticker = ca.ticker
          WHERE ca.asset_type='fund' AND (lp.md IS NULL OR lp.md < $1::date)
          ORDER BY ca.ticker`,
-                [targetISO]
+                [maxISO] // revisa si falta hoy; si ya tienes hoy, se omitirá (y si no, se intentará mejorar)
             );
             rows = many;
         }
@@ -130,54 +126,66 @@ async function runUpdateLastPrices({ ticker = "", log = console.log } = {}) {
             const isin = String(f.ticker).trim();
             const lastDate = f.last_date ? toISODate(new Date(f.last_date)) : null;
 
-            const tryInsert = async (parsed) => {
-                if (!parsed || parsed.price == null || !parsed.date) return false;
-                const parsedISO = toISODate(parsed.date);
-
-                // Log por requerimiento
-                log(`[${parsed.source.toUpperCase()}] ${isin} -> price:${parsed.price} | date:${parsed.date} | rawPrice:${parsed.rawPrice} | rawDate:${parsed.rawDate}`);
-
-                // Reglas de aceptación
-                if (parsedISO > targetISO || parsedISO < minISO) return false;
-                if (lastDate && parsedISO <= lastDate) return false;
-
-                const exists = await db.query(
-                    `SELECT 1 FROM prices WHERE ticker=$1 AND date=$2 LIMIT 1`,
-                    [isin, parsedISO]
-                );
-                if (exists.rowCount > 0) return true;
-
-                await db.query(
-                    `INSERT INTO prices (ticker, date, closing_price) VALUES ($1,$2,$3)`,
-                    [isin, parsedISO, parsed.price]
-                );
-                report.updated += 1;
-                return true;
-            };
-
+            let qf = null, ft = null;
             try {
-                // 1) QueFondos
-                try {
-                    const qfURL = `https://www.quefondos.com/es/fondos/ficha/index.html?isin=${encodeURIComponent(isin)}`;
-                    const html  = await fetchHTML(qfURL);
-                    const parsed= parseQuefondos(html);
-                    const ok = await tryInsert(parsed);
-                    if (ok) continue;
-                } catch (e) { /* sigue FT */ }
+                const qfURL = `https://www.quefondos.com/es/fondos/ficha/index.html?isin=${encodeURIComponent(isin)}`;
+                const html  = await fetchHTML(qfURL);
+                qf = parseQuefondos(html);
+            } catch (_e) { qf = null; }
+            try {
+                const ftURL = `https://markets.ft.com/data/funds/tearsheet/summary?s=${encodeURIComponent(isin)}`;
+                const html  = await fetchHTML(ftURL);
+                ft = parseFT(html);
+            } catch (_e) { ft = null; }
 
-                // 2) FT
-                try {
-                    const ftURL = `https://markets.ft.com/data/funds/tearsheet/summary?s=${encodeURIComponent(isin)}`;
-                    const html  = await fetchHTML(ftURL);
-                    const parsed= parseFT(html);
-                    const ok = await tryInsert(parsed);
-                    if (ok) continue;
-                } catch (e) { /* nada */ }
+            // Logs de fuentes
+            if (qf) log(`[QF] ${isin} date:${qf.date?toISODate(qf.date):'-'} price:${qf.price} rawP:${qf.rawPrice} rawD:${qf.rawDate}`);
+            if (ft) log(`[FT] ${isin} date:${ft.date?toISODate(ft.date):'-'} price:${ft.price} rawP:${ft.rawPrice} rawD:${ft.rawDate}`);
 
-                report.skipped += 1;
-            } catch (err) {
-                report.errors.push({ isin, error: String(err.message || err) });
+            // Normalizar candidatos válidos
+            const rawCandidates = [qf, ft].filter(Boolean).filter(c => c.price != null && c.date);
+            const candidates = [];
+            for (const c of rawCandidates) {
+                const iso = toISODate(c.date);
+                if (iso < minISO) { log(`[SKIP] ${isin} ${c.source} too old: ${iso} < ${minISO}`); continue; }
+                if (iso > maxISO) { log(`[SKIP] ${isin} ${c.source} in future: ${iso} > ${maxISO}`); continue; }
+                candidates.push({ ...c, iso });
             }
+
+            if (candidates.length === 0) {
+                report.skipped += 1;
+                continue;
+            }
+
+            // Elegir el MÁS RECIENTE (FT 2025-08-12 ganará a QF 2025-08-08)
+            candidates.sort((a,b) => (a.iso < b.iso ? 1 : a.iso > b.iso ? -1 : 0));
+            const chosen = candidates[0];
+
+            // No insertes si no mejora la fecha existente
+            if (lastDate && chosen.iso <= lastDate) {
+                log(`[SKIP] ${isin} chosen ${chosen.iso} <= last ${lastDate}`);
+                report.skipped += 1;
+                continue;
+            }
+
+            // Evitar duplicado exacto
+            const exists = await db.query(
+                `SELECT 1 FROM prices WHERE ticker=$1 AND date=$2 LIMIT 1`,
+                [isin, chosen.iso]
+            );
+            if (exists.rowCount > 0) {
+                log(`[SKIP] ${isin} price for ${chosen.iso} already exists`);
+                report.skipped += 1;
+                continue;
+            }
+
+            await db.query(
+                `INSERT INTO prices (ticker, date, closing_price) VALUES ($1,$2,$3)`,
+                [isin, chosen.iso, chosen.price]
+            );
+            report.updated += 1;
+            log(`[OK] ${isin} -> chosen ${chosen.source.toUpperCase()} | date:${chosen.iso} price:${chosen.price}` +
+                (lastDate ? ` (prev:${lastDate})` : ""));
         }
     } catch (e) {
         report.errors.push({ error: String(e.message || e) });
