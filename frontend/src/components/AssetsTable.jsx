@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import api from "../utils/api";
 import { fmtCurrency, fmtNumber, formatByType } from "../utils/format";
 import { t } from "../utils/i18n";
+import { FaSyncAlt } from "react-icons/fa";
 
 // Soporta coma decimal y puntos de millar (es-ES) -> número JS
 function parseLocaleNumber(input) {
@@ -28,6 +29,8 @@ function InlineForm({ asset, side, onCancel, onSaved }) {
             setMsg({ ok: false, text: t("errorOp") });
             return;
         }
+
+        // Validación cliente: no vender más de lo que tengo
         if (side === "SELL" && q > Number(asset.quantity)) {
             setMsg({ ok: false, text: t("cannotSellMore") });
             return;
@@ -46,7 +49,7 @@ function InlineForm({ asset, side, onCancel, onSaved }) {
             });
             setMsg({ ok: true, text: t("successOp") });
             onSaved?.();
-            onCancel?.();
+            onCancel?.(); // cerrar formulario
         } catch (err) {
             const status = err?.response?.status;
             if (status === 409) {
@@ -65,27 +68,51 @@ function InlineForm({ asset, side, onCancel, onSaved }) {
                 <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
                     <div className="flex flex-col">
                         <label className="text-xs text-gray-600 mb-1">{t("fieldDate")}</label>
-                        <input type="date" className="border rounded px-2 py-1" value={opDate} onChange={(e) => setOpDate(e.target.value)} required />
+                        <input
+                            type="date"
+                            className="border rounded px-2 py-1"
+                            value={opDate}
+                            onChange={(e) => setOpDate(e.target.value)}
+                            required
+                        />
                     </div>
                     <div className="flex flex-col">
                         <label className="text-xs text-gray-600 mb-1">{t("fieldPrice")}</label>
-                        <input className="border rounded px-2 py-1" placeholder="1.234,56" value={price} onChange={(e) => setPrice(e.target.value)} required />
+                        <input
+                            className="border rounded px-2 py-1"
+                            placeholder="1.234,56"
+                            value={price}
+                            onChange={(e) => setPrice(e.target.value)}
+                            required
+                        />
                     </div>
                     <div className="flex flex-col">
                         <label className="text-xs text-gray-600 mb-1">{t("fieldQty")}</label>
-                        <input className="border rounded px-2 py-1" placeholder="100" value={qty} onChange={(e) => setQty(e.target.value)} required />
+                        <input
+                            className="border rounded px-2 py-1"
+                            placeholder="100"
+                            value={qty}
+                            onChange={(e) => setQty(e.target.value)}
+                            required
+                        />
                     </div>
 
                     {msg.text && (
-                        <span className={`text-sm ${msg.ok ? "text-green-600" : "text-red-600"}`}>{msg.text}</span>
+                        <span className={`text-sm ${msg.ok ? "text-green-600" : "text-red-600"}`}>
+              {msg.text}
+            </span>
                     )}
 
                     <div className="ml-auto flex gap-2">
-                        <button type="button" className="px-3 py-2 rounded-md border" onClick={onCancel}>{t("cancel")}</button>
+                        <button type="button" className="px-3 py-2 rounded-md border" onClick={onCancel}>
+                            {t("cancel")}
+                        </button>
                         <button
                             type="submit"
                             disabled={saving}
-                            className={`px-3 py-2 rounded-md text-white ${side === "BUY" ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700"} disabled:opacity-60`}
+                            className={`px-3 py-2 rounded-md text-white ${
+                                side === "BUY" ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700"
+                            } disabled:opacity-60`}
                         >
                             {saving ? "…" : t("save")}
                         </button>
@@ -97,10 +124,12 @@ function InlineForm({ asset, side, onCancel, onSaved }) {
 }
 
 export default function AssetsTable({ assets, onChanged, onAdd }) {
-    const [openRow, setOpenRow] = useState(null);
-    const [mode, setMode] = useState(null);
-    const [updating, setUpdating] = useState({});
+    const [openRow, setOpenRow] = useState(null); // ticker de fila abierta
+    const [mode, setMode] = useState(null); // 'BUY' | 'SELL'
+    const [updating, setUpdating] = useState({}); // por-ticker
     const [updateMsg, setUpdateMsg] = useState({});
+    const [updatingAll, setUpdatingAll] = useState(false);
+    const [updateAllMsg, setUpdateAllMsg] = useState("");
 
     const openForm = (ticker, m) => {
         setOpenRow(ticker === openRow && mode === m ? null : ticker);
@@ -125,9 +154,23 @@ export default function AssetsTable({ assets, onChanged, onAdd }) {
         }
     };
 
+    const updateAllFunds = async () => {
+        setUpdatingAll(true);
+        setUpdateAllMsg("");
+        try {
+            await api.post("/api/updateLastPrices");
+            setUpdateAllMsg(t("updatedOk"));
+            onChanged?.();
+        } catch (_e) {
+            setUpdateAllMsg(t("updatedErr"));
+        } finally {
+            setUpdatingAll(false);
+            setTimeout(() => setUpdateAllMsg(""), 3000);
+        }
+    };
+
     const renderLastDate = (d) => {
         if (!d) return "—";
-        // Si viene ya en YYYY-MM-DD, lo mostramos tal cual; si no, intentamos normalizar
         if (/^\d{4}-\d{2}-\d{2}$/.test(String(d))) return d;
         try {
             const dt = new Date(d);
@@ -135,7 +178,9 @@ export default function AssetsTable({ assets, onChanged, onAdd }) {
             const m = String(dt.getMonth() + 1).padStart(2, "0");
             const day = String(dt.getDate()).padStart(2, "0");
             return `${y}-${m}-${day}`;
-        } catch { return String(d); }
+        } catch {
+            return String(d);
+        }
     };
 
     return (
@@ -166,10 +211,26 @@ export default function AssetsTable({ assets, onChanged, onAdd }) {
                         const qty = Number(asset.quantity);
                         const price = Number(asset.purchase_price);
                         const invested = Number(asset.invested ?? qty * price);
-                        const currentPrice = asset.current_price != null ? Number(asset.current_price) : null;
-                        const currentValue = asset.current_value != null ? Number(asset.current_value) : (currentPrice != null ? currentPrice * qty : null);
-                        const pnlAbs = asset.pnl_abs != null ? Number(asset.pnl_abs) : (currentPrice != null ? (currentPrice - price) * qty : null);
-                        const pnlPct = asset.pnl_pct != null ? Number(asset.pnl_pct) : (currentPrice != null && price > 0 ? ((currentPrice - price) / price) * 100 : null);
+                        const currentPrice =
+                            asset.current_price != null ? Number(asset.current_price) : null;
+                        const currentValue =
+                            asset.current_value != null
+                                ? Number(asset.current_value)
+                                : currentPrice != null
+                                    ? currentPrice * qty
+                                    : null;
+                        const pnlAbs =
+                            asset.pnl_abs != null
+                                ? Number(asset.pnl_abs)
+                                : currentPrice != null
+                                    ? (currentPrice - price) * qty
+                                    : null;
+                        const pnlPct =
+                            asset.pnl_pct != null
+                                ? Number(asset.pnl_pct)
+                                : currentPrice != null && price > 0
+                                    ? ((currentPrice - price) / price) * 100
+                                    : null;
 
                         const isOpen = openRow === asset.ticker;
                         const tick = asset.ticker;
@@ -184,14 +245,26 @@ export default function AssetsTable({ assets, onChanged, onAdd }) {
                                     <td className="p-2 border">{asset.type}</td>
                                     <td className="p-2 border text-right">{fmtNumber.format(qty)}</td>
                                     <td className="p-2 border text-right">{formatByType(asset.type, price)}</td>
-                                    <td className="p-2 border text-right">{currentPrice != null ? formatByType(asset.type, currentPrice) : "—"}</td>
+                                    <td className="p-2 border text-right">
+                                        {currentPrice != null ? formatByType(asset.type, currentPrice) : "—"}
+                                    </td>
                                     <td className="p-2 border">{renderLastDate(asset.last_price_date)}</td>
                                     <td className="p-2 border text-right">{fmtCurrency.format(invested)}</td>
-                                    <td className="p-2 border text-right">{currentValue != null ? fmtCurrency.format(currentValue) : "—"}</td>
-                                    <td className={`p-2 border text-right ${(pnlAbs ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
+                                    <td className="p-2 border text-right">
+                                        {currentValue != null ? fmtCurrency.format(currentValue) : "—"}
+                                    </td>
+                                    <td
+                                        className={`p-2 border text-right ${
+                                            (pnlAbs ?? 0) >= 0 ? "text-green-600" : "text-red-600"
+                                        }`}
+                                    >
                                         {pnlAbs != null ? fmtCurrency.format(pnlAbs) : "—"}
                                     </td>
-                                    <td className={`p-2 border text-right ${(pnlPct ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
+                                    <td
+                                        className={`p-2 border text-right ${
+                                            (pnlPct ?? 0) >= 0 ? "text-green-600" : "text-red-600"
+                                        }`}
+                                    >
                                         {pnlPct != null ? `${pnlPct.toFixed(2)}%` : "—"}
                                     </td>
                                     <td className="p-2 border text-right">
@@ -212,16 +285,26 @@ export default function AssetsTable({ assets, onChanged, onAdd }) {
                                             </button>
                                             <button
                                                 title={t("updateLastPrice")}
-                                                className={`px-2 py-1 rounded-md text-white ${asset.type==="fund" ? "bg-blue-600 hover:bg-blue-700" : "bg-gray-400 cursor-not-allowed"}`}
-                                                disabled={asset.type!=="fund" || isUpdating}
+                                                className={`px-2 py-1 rounded-md text-white ${
+                                                    asset.type === "fund"
+                                                        ? "bg-blue-600 hover:bg-blue-700"
+                                                        : "bg-gray-400 cursor-not-allowed"
+                                                }`}
+                                                disabled={asset.type !== "fund" || isUpdating}
                                                 onClick={() => updatePrice(asset.ticker, asset.type)}
                                             >
                                                 {isUpdating ? t("updating") : "↻"}
                                             </button>
                                         </div>
-                                        {uMsg === "ok" && <div className="text-xs text-green-600 mt-1">{t("updatedOk")}</div>}
-                                        {uMsg === "err" && <div className="text-xs text-red-600 mt-1">{t("updatedErr")}</div>}
-                                        {uMsg === "nf" && <div className="text-xs text-gray-500 mt-1">{t("onlyFunds")}</div>}
+                                        {uMsg === "ok" && (
+                                            <div className="text-xs text-green-600 mt-1">{t("updatedOk")}</div>
+                                        )}
+                                        {uMsg === "err" && (
+                                            <div className="text-xs text-red-600 mt-1">{t("updatedErr")}</div>
+                                        )}
+                                        {uMsg === "nf" && (
+                                            <div className="text-xs text-gray-500 mt-1">{t("onlyFunds")}</div>
+                                        )}
                                     </td>
                                 </tr>
 
@@ -239,21 +322,42 @@ export default function AssetsTable({ assets, onChanged, onAdd }) {
 
                     {assets.length === 0 && (
                         <tr>
-                            <td className="p-3 text-center text-gray-500" colSpan={13}>{t("noAssets")}</td>
+                            <td className="p-3 text-center text-gray-500" colSpan={13}>
+                                {t("noAssets")}
+                            </td>
                         </tr>
                     )}
                     </tbody>
                 </table>
             </div>
 
-            {onAdd && (
-                <div className="mt-3">
-                    <button onClick={onAdd} className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-green-600 text-white hover:bg-green-700">
+            {/* Fila de acciones: izquierda "+ Add", derecha "Update all prices" */}
+            <div className="mt-3 flex items-center justify-between">
+                {onAdd ? (
+                    <button
+                        onClick={onAdd}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-green-600 text-white hover:bg-green-700"
+                    >
                         <span className="text-lg leading-none">＋</span>
                         {t("add")}
                     </button>
+                ) : (
+                    <span /> // mantiene el espacio a la izquierda si no hay onAdd
+                )}
+
+                <div className="flex items-center gap-2">
+                    {updateAllMsg && <span className="text-sm text-gray-600">{updateAllMsg}</span>}
+                    <button
+                        onClick={updateAllFunds}
+                        disabled={updatingAll}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
+                        title={t("updateAllPrices")}
+                    >
+                        <FaSyncAlt className={updatingAll ? "animate-spin" : ""} />
+                        {updatingAll ? t("updating") : t("updateAllPrices")}
+                    </button>
                 </div>
-            )}
+            </div>
         </div>
     );
 }
