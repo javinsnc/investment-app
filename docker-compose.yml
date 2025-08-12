@@ -33,9 +33,9 @@ services:
     healthcheck:
       # node:alpine trae wget (busybox). Si prefieres curl, instálalo en el Dockerfile.
       test: ["CMD-SHELL", "wget -qO- http://localhost:5050/api/health >/dev/null 2>&1 || exit 1"]
-      interval: 5s
-      timeout: 2s
-      retries: 20
+      interval: 1m
+      timeout: 5s
+      retries: 10
       start_period: 5s
 
   frontend:
