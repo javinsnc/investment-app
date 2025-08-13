@@ -6,13 +6,13 @@ const caPath = process.env.PGSSL_CA || "/etc/secrets/aiven-ca.pem";
 let ssl = false;
 
 try {
-    const ca = fs.readFileSync(caPath, "utf8").toString();
+    const ca = fs.readFileSync(caPath, "utf8");
     if (ca.includes("-----BEGIN CERTIFICATE-----")) {
         console.log(`[db] Using CA file: ${caPath}`);
         console.log("=== CA FILE CONTENT START ===");
         console.log(ca);
         console.log("=== CA FILE CONTENT END ===");
-        ssl = { rejectUnauthorized: true, ca };
+        ssl = { rejectUnauthorized: true, ca: ca };
     }
 } catch {
     console.log("[db] No CA file found — running without custom CA (ssl disabled for local).");
