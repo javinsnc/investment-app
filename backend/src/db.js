@@ -92,6 +92,8 @@ const config = {
     },
 };
 
+console.log("Config is ${JSON.stringify(config, null, 2)}");
+
 // ===== 4) Pool y export =====
 const pool = new Pool(config);
 
