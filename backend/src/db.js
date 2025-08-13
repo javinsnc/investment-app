@@ -12,7 +12,7 @@ try {
         console.log("=== CA FILE CONTENT START ===");
         console.log(ca);
         console.log("=== CA FILE CONTENT END ===");
-        ssl = { rejectUnauthorized: true, ca, servername: undefined };
+        ssl = { rejectUnauthorized: true, ca };
     }
 } catch {
     console.log("[db] No CA file found — running without custom CA (ssl disabled for local).");
