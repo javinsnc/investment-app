@@ -6,7 +6,7 @@ const caPath = process.env.PGSSL_CA || "/etc/secrets/aiven-ca.pem";
 let ssl = false;
 
 try {
-    const ca = fs.readFileSync(caPath, "utf8");
+    const ca = fs.readFileSync(caPath, "utf8").toString();
     if (ca.includes("-----BEGIN CERTIFICATE-----")) {
         console.log(`[db] Using CA file: ${caPath}`);
         console.log("=== CA FILE CONTENT START ===");
