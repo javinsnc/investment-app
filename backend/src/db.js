@@ -62,11 +62,11 @@ function parseDbUrl(u) {
 // ===== 3) Construcción del config al estilo Aiven =====
 const parsed = process.env.DATABASE_URL ? parseDbUrl(process.env.DATABASE_URL) : {};
 
-const user = parsed.user
-const password = parsed.password
-const host = parsed.host
-const port = parsed.port
-const database = parsed.database
+const user = process.env.PGUSER || parsed.user || "avnadmin";
+const password = process.env.PGPASSWORD || parsed.password || "";
+const host = process.env.PGHOST || parsed.host || "investment-app-db-javinsnc-e97f.c.aivencloud.com";
+const port = Number(process.env.PGPORT) || parsed.port || 5432;
+const database = process.env.PGDATABASE || parsed.database || "defaultdb";
 
 // CA: primero el inline como en la guía de Aiven; si está vacío, intenta fallback por env.
 let ca = INLINE_CA_PEM && INLINE_CA_PEM.includes("-----BEGIN CERTIFICATE-----") ? INLINE_CA_PEM : null;
