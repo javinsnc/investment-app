@@ -14,23 +14,29 @@ function normalizePem(pem) {
 }
 
 function loadCA() {
-    // 1) Ruta de fichero (Secret File de Render recomendado)
-    const path = process.env.PGSSL_CA || process.env.PGSSLROOTCERT || "/etc/secrets/aiven-ca.pem";
-    try {
-        const filePem = normalizePem(fs.readFileSync(path, "utf8"));
-        if (filePem) return { source: `file:${path}`, caArray: filePem.split(/(?=-----BEGIN CERTIFICATE-----)/g) };
-    } catch (_) {}
+    // 1) Ruta de fichero (Secret File recomendado en Render)
+    const candidPaths = [
+        process.env.PGSSL_CA,
+        process.env.PGSSLROOTCERT,
+        "/etc/secrets/aiven-ca.pem", // fallback típico
+    ].filter(Boolean);
+    for (const p of candidPaths) {
+        try {
+            const pem = normalizePem(fs.readFileSync(p, "utf8"));
+            if (pem) return { source: `file:${p}`, caArray: pem.split(/(?=-----BEGIN CERTIFICATE-----)/g) };
+        } catch {}
+    }
 
-    // 2) Base64 (no necesita saltos de línea, ideal si no quieres Secret Files)
+    // 2) Base64 (sin problema de saltos de línea)
     const b64 = process.env.PGSSL_CA_BASE64 || process.env.PGSSL_CA_PEM_BASE64;
     if (b64) {
         try {
             const decoded = normalizePem(Buffer.from(b64, "base64").toString("utf8"));
             if (decoded) return { source: "env:base64", caArray: decoded.split(/(?=-----BEGIN CERTIFICATE-----)/g) };
-        } catch (_) {}
+        } catch {}
     }
 
-    // 3) PEM multilínea en env (no recomendado en Render; puede aplanar)
+    // 3) PEM multilínea en env (ojo en Render puede aplanar)
     const pemEnv = normalizePem(process.env.PGSSL_CA_PEM);
     if (pemEnv) return { source: "env:pem", caArray: pemEnv.split(/(?=-----BEGIN CERTIFICATE-----)/g) };
 
@@ -39,23 +45,32 @@ function loadCA() {
 
 function parseDbUrl(u) {
     try {
-        const x = new URL(u);
+        const url = new URL(u);
+        // Nota: url.search incluye el "?" (p.ej. "?sslmode=verify-full")
         return {
-            user: decodeURIComponent(x.username || ""),
-            password: decodeURIComponent(x.password || ""),
-            host: x.hostname,
-            port: x.port ? Number(x.port) : undefined,
-            database: x.pathname ? x.pathname.replace(/^\//, "") : undefined,
-            search: x.search || "",
+            user: decodeURIComponent(url.username || ""),
+            password: decodeURIComponent(url.password || ""),
+            host: url.hostname,
+            port: url.port ? Number(url.port) : undefined,
+            database: url.pathname ? url.pathname.replace(/^\//, "") : undefined,
+            search: url.search || "",
+            sslmode: (url.searchParams.get("sslmode") || "").toLowerCase(), // <-- limpio
+            raw: url,
         };
-    } catch { return {}; }
+    } catch {
+        return {};
+    }
+}
+
+function looksLikeAivenHost(h) {
+    return typeof h === "string" && /\.aivencloud\.com$/i.test(h);
 }
 
 function buildConfig() {
-    const url = process.env.DATABASE_URL;
-    const parsed = url ? parseDbUrl(url) : {};
-    const config = url
-        ? { connectionString: url }
+    const hasUrl = !!process.env.DATABASE_URL;
+    const parsed = hasUrl ? parseDbUrl(process.env.DATABASE_URL) : {};
+    const cfg = hasUrl
+        ? { connectionString: process.env.DATABASE_URL }
         : {
             host: process.env.PGHOST,
             port: process.env.PGPORT ? Number(process.env.PGPORT) : undefined,
@@ -64,29 +79,45 @@ function buildConfig() {
             database: process.env.PGDATABASE,
         };
 
-    // SSL verify-full con CA (preferido)
+    const host = parsed.host || process.env.PGHOST;
     const caInfo = loadCA();
+
+    // Caso preferido: tenemos CA válida -> verify-full real
     if (caInfo) {
-        config.ssl = {
+        cfg.ssl = {
             rejectUnauthorized: true,
-            ca: caInfo.caArray, // puede contener cadena (intermedios + raíz)
-            // SNI: usar el host de la URL o PGHOST
-            servername: parsed.host || process.env.PGHOST,
+            ca: caInfo.caArray,        // admite cadena (intermedios + raíz)
+            servername: host,          // SNI para CN/SAN
         };
         console.log(`[db] SSL verify-full using ${caInfo.source} — blocks: ${caInfo.caArray.length}`);
-        return config;
+        return cfg;
     }
 
-    // Fallback explícito: si la URL pide "require", usar SSL sin verificación (temporal)
-    if (parsed.search && /sslmode=require/i.test(parsed.search)) {
-        config.ssl = { rejectUnauthorized: false, servername: parsed.host || process.env.PGHOST };
-        console.log("[db] SSL require (no-verify) — CA not provided");
-        return config;
+    // Sin CA cargado:
+    // 1) Si sslmode=verify-full pero NO hay CA → degradar a require (no-verify) con aviso
+    if (parsed.sslmode === "verify-full") {
+        cfg.ssl = { rejectUnauthorized: false, servername: host };
+        console.warn("[db] WARNING: sslmode=verify-full sin CA → degradando a 'require' (no-verify). Carga el CA para verificación estricta.");
+        return cfg;
     }
 
-    // Sin SSL (no recomendado para Aiven)
-    console.log("[db] SSL disabled — CA not provided and no sslmode=require in URL");
-    return config;
+    // 2) Si sslmode=require → no-verify
+    if (parsed.sslmode === "require") {
+        cfg.ssl = { rejectUnauthorized: false, servername: host };
+        console.log("[db] SSL require (no-verify) — no CA provided");
+        return cfg;
+    }
+
+    // 3) Si no hay sslmode pero el host parece de Aiven → fuerza require (para no romper)
+    if (!parsed.sslmode && looksLikeAivenHost(host)) {
+        cfg.ssl = { rejectUnauthorized: false, servername: host };
+        console.log("[db] SSL require (no-verify) — inferred by aiven host and no CA provided");
+        return cfg;
+    }
+
+    // 4) Sin SSL (solo si el servicio lo permite)
+    console.log("[db] SSL disabled — no CA and no sslmode");
+    return cfg;
 }
 
 const pool = new Pool(buildConfig());
