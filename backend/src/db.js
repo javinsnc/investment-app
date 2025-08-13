@@ -1,13 +1,8 @@
 const { Pool } = require("pg");
-const fs = require("fs");
-const { URL } = require("url");
 
-/**
- * 1) PRIMERA OPCIÓN (prioridad): CA embebido en código para pruebas rápidas.
- *    - Sustituye el marcador por el/los bloques PEM completos.
- *    - Puedes pegar varios certificados (intermedios + raíz), uno detrás de otro.
- *    - Si lo dejas vacío, se usarán las otras fuentes (env/file) como fallback.
- */
+// ===== 1) Pega aquí el CA como en el ejemplo de Aiven =====
+//    - Puedes pegar uno o varios bloques (intermedio + raíz), uno detrás de otro.
+//    - Si lo dejas vacío, intentaremos PGSSL_CA_PEM o PGSSL_CA_BASE64.
 const INLINE_CA_PEM = `-----BEGIN CERTIFICATE-----
 MIIEUDCCArigAwIBAgIUb+B3mP0cZvN1i9i/XY6pkyJ+aZcwDQYJKoZIhvcNAQEM
 BQAwQDE+MDwGA1UEAww1MmFhYTExZGEtZmUyYy00ZjAxLWFkMzYtZmQ4MjJmNTc5
@@ -35,108 +30,70 @@ EsA4atIwUqlzLaSn6ExhBOQQo0VoWzQF7b3+aH44MGKw7+AWMlVI1rf1wtKiscas
 wFQWYA==
 -----END CERTIFICATE-----`;
 
-/**
- * Normaliza el PEM (maneja \n escapados, CRLF, múltiples bloques).
- */
-function normalizePem(pem) {
-    if (!pem) return null;
-    let s = String(pem).trim();
-    if (s.includes("\\n") && !s.includes("\n")) s = s.replace(/\\n/g, "\n");
-    s = s.replace(/\r\n/g, "\n");
-    const blocks = s
-        .split(/(?=-----BEGIN CERTIFICATE-----)/g)
-        .map(b => b.trim())
-        .filter(b => b.startsWith("-----BEGIN CERTIFICATE-----") && b.endsWith("-----END CERTIFICATE-----"));
-    return blocks.length ? blocks.join("\n") : null;
-}
-
-/**
- * Lee CA desde variables/ruta (fallback si no usamos INLINE_CA_PEM).
- */
-function readCaFromEnv() {
-    // 1) PEM directo (multilínea)
-    const pem = normalizePem(process.env.PGSSL_CA_PEM);
-    if (pem) return pem;
-
-    // 2) Base64 (una sola línea)
+// ===== 2) Helpers mínimos (solo para completar el CA si no lo pegas inline) =====
+function readCaFromEnvFallback() {
+    const pem = process.env.PGSSL_CA_PEM;
+    if (pem && pem.includes("-----BEGIN CERTIFICATE-----")) return pem;
     const b64 = process.env.PGSSL_CA_BASE64 || process.env.PGSSL_CA_PEM_BASE64;
     if (b64) {
         try {
-            const decoded = normalizePem(Buffer.from(b64, "base64").toString("utf8"));
-            if (decoded) return decoded;
+            const decoded = Buffer.from(b64, "base64").toString("utf8");
+            if (decoded.includes("-----BEGIN CERTIFICATE-----")) return decoded;
         } catch (_) {}
     }
-
-    // 3) Ruta de fichero (Secret File de Render u otras rutas)
-    const caPath = process.env.PGSSL_CA || process.env.PGSSLROOTCERT || "/etc/secrets/aiven-ca.pem";
-    try {
-        const filePem = normalizePem(fs.readFileSync(caPath, "utf8"));
-        if (filePem) return filePem;
-    } catch (_) {}
-
     return null;
 }
 
-function getHostFromUrl(u) {
-    try { return new URL(u).hostname; } catch { return null; }
+function parseDbUrl(u) {
+    try {
+        const x = new URL(u);
+        return {
+            user: decodeURIComponent(x.username || ""),
+            password: decodeURIComponent(x.password || ""),
+            host: x.hostname,
+            port: x.port ? Number(x.port) : undefined,
+            database: x.pathname ? x.pathname.replace(/^\//, "") : undefined,
+        };
+    } catch {
+        return {};
+    }
 }
 
-function buildConfig() {
-    const url = process.env.DATABASE_URL;
-    const cfg = url
-        ? { connectionString: url }
-        : {
-            host: process.env.PGHOST || "db",
-            port: Number(process.env.PGPORT) || 5432,
-            user: process.env.PGUSER || "app",
-            password: process.env.PGPASSWORD || "app",
-            database: process.env.PGDATABASE || "appdb",
-        };
+// ===== 3) Construcción del config al estilo Aiven =====
+const parsed = process.env.DATABASE_URL ? parseDbUrl(process.env.DATABASE_URL) : {};
 
-    // SNI (debe coincidir con CN/SAN del certificado)
-    const hostForSNI = (url && getHostFromUrl(url)) || process.env.PGHOST || undefined;
+const user = process.env.PGUSER || parsed.user || "avnadmin";
+const password = process.env.PGPASSWORD || parsed.password || "";
+const host = process.env.PGHOST || parsed.host || "investment-app-db-javinsnc-e97f.c.aivencloud.com";
+const port = Number(process.env.PGPORT) || parsed.port || 5432;
+const database = process.env.PGDATABASE || parsed.database || "defaultdb";
 
-    // === PRIORIDAD 1: CA embebido en código ===
-    const inline = normalizePem(INLINE_CA_PEM);
-    if (inline && inline.includes("BEGIN CERTIFICATE")) {
-        const caArray = inline
-            .split(/(?=-----BEGIN CERTIFICATE-----)/g)
-            .map(s => s.trim())
-            .filter(Boolean);
-        cfg.ssl = {
-            rejectUnauthorized: true,
-            ca: caArray, // soporta cadena (intermedios + raíz)
-            ...(hostForSNI ? { servername: hostForSNI } : {}),
-        };
-        return cfg;
-    }
-
-    // === PRIORIDAD 2: CA desde env/ruta (fallback) ===
-    const caPem = readCaFromEnv();
-    if (caPem) {
-        const caArray = caPem
-            .split(/(?=-----BEGIN CERTIFICATE-----)/g)
-            .map(s => s.trim())
-            .filter(Boolean);
-        cfg.ssl = {
-            rejectUnauthorized: true,
-            ca: caArray,
-            ...(hostForSNI ? { servername: hostForSNI } : {}),
-        };
-        return cfg;
-    }
-
-    // === PRIORIDAD 3: sslmode=require en la URL => SSL sin verificación (escape temporal) ===
-    if (url && /sslmode=require/i.test(url)) {
-        cfg.ssl = { rejectUnauthorized: false, ...(hostForSNI ? { servername: hostForSNI } : {}) };
-        return cfg;
-    }
-
-    // Sin SSL por defecto (si nada lo pide)
-    return cfg;
+// CA: primero el inline como en la guía de Aiven; si está vacío, intenta fallback por env.
+let ca = INLINE_CA_PEM && INLINE_CA_PEM.includes("-----BEGIN CERTIFICATE-----") ? INLINE_CA_PEM : null;
+if (!ca) {
+    const fb = readCaFromEnvFallback();
+    if (fb) ca = fb;
+}
+if (!ca) {
+    throw new Error(
+        "No CA provided. Paste your Aiven CA into INLINE_CA_PEM (db.js) o define PGSSL_CA_PEM / PGSSL_CA_BASE64 en Render."
+    );
 }
 
-const pool = new Pool(buildConfig());
+const config = {
+    user,
+    password,
+    host,
+    port,
+    database,
+    ssl: {
+        rejectUnauthorized: true,
+        ca,
+    },
+};
+
+// ===== 4) Pool y export =====
+const pool = new Pool(config);
 
 pool.on("error", (err) => {
     console.error("Postgres pool error:", err);
