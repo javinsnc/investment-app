@@ -47,10 +47,7 @@ const config = {
     host,
     port,
     database,
-    ssl: {
-        rejectUnauthorized: true,
-        ca,
-    },
+    ssl: ssl,
 };
 
 console.log(`Config is ${JSON.stringify(config, null, 2)}`);
