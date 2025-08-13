@@ -46,7 +46,33 @@ app.use(morgan("dev"));
 
 // ====== Health ======
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
-
+app.get("/api/health/dbtls", async (_req, res) => {
+  let client;
+  try {
+    client = await db.pool.connect();
+    const sock = client?.connection?.stream;
+    const info = {
+      ssl: !!sock,
+      authorized: sock?.authorized ?? null,
+      authorizationError: sock?.authorizationError ?? null,
+    };
+    if (sock && typeof sock.getPeerCertificate === "function") {
+      const cert = sock.getPeerCertificate(true);
+      info.peer = {
+        subject: cert?.subject || null,
+        issuer: cert?.issuer || null,
+        valid_from: cert?.valid_from || null,
+        valid_to: cert?.valid_to || null,
+        subjectaltname: cert?.subjectaltname || null,
+      };
+    }
+    res.json({ ok: true, info });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e.message || e) });
+  } finally {
+    if (client) client.release();
+  }
+});
 app.get("/api/health/db", async (_req, res) => {
   try {
     const r = await db.query("SELECT NOW() AS now");
