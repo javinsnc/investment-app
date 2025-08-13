@@ -1,14 +1,10 @@
 const { Pool } = require("pg");
 const fs = require("fs");
 
-function bool(v) {
-    if (v == null) return false;
-    const s = String(v).toLowerCase();
-    return s === "1" || s === "true" || s === "yes" || s === "on";
-}
-
-function buildConfig() {
+function getConfigFromEnv() {
     const url = process.env.DATABASE_URL;
+
+    // Base config: URL o variables sueltas
     const cfg = url
         ? { connectionString: url }
         : {
@@ -19,51 +15,41 @@ function buildConfig() {
             database: process.env.PGDATABASE || "appdb",
         };
 
-    // SSL config
-    const sslMode = (process.env.PGSSLMODE || "").toLowerCase();
-    const forceSSL = bool(process.env.DATABASE_SSL);
+    // ---- SSL según Aiven/Render ----
+    // Prioridad 1: PGSSL_CA_PEM (CA pegada en env) => verificación estricta
+    const caPem = process.env.PGSSL_CA_PEM;
 
-    let ssl = false;
-
-    // Si la URL ya lleva sslmode, respetamos; si no, usamos PGSSLMODE / DATABASE_SSL
-    const urlHasSSL = !!(url && /sslmode=/i.test(url));
-    const wantsVerifyFull =
-        (sslMode === "verify-full") || (url && /sslmode=verify-full/i.test(url));
-    const wantsRequire =
-        (sslMode === "require") || (url && /sslmode=require/i.test(url)) || forceSSL;
-    const wantsDisable =
-        (sslMode === "disable") || (url && /sslmode=disable/i.test(url));
-
-    if (wantsDisable) {
-        ssl = false;
-    } else if (wantsVerifyFull) {
-        // CA por fichero o por env directa
-        const caPath = process.env.PGSSL_CA || process.env.PGSSLROOTCERT;
-        const caPemEnv = process.env.PGSSL_CA_PEM;
-        let ca;
-        if (caPemEnv && caPemEnv.trim().startsWith("-----BEGIN CERTIFICATE-----")) {
-            ca = caPemEnv;
-        } else if (caPath) {
-            try {
-                ca = fs.readFileSync(caPath, "utf8");
-            } catch (e) {
-                console.warn("PG verify-full: no pude leer CA en", caPath, e.message);
-            }
-        }
-        ssl = ca ? { ca, rejectUnauthorized: true } : { rejectUnauthorized: true };
-    } else if (wantsRequire) {
-        // SSL sin verificación (self-signed)
-        ssl = { rejectUnauthorized: false };
-    } else if (!urlHasSSL && sslMode === "") {
-        // Por defecto: sin SSL (solo si nada lo pide)
-        ssl = false;
+    if (caPem && caPem.includes("-----BEGIN CERTIFICATE-----")) {
+        cfg.ssl = {
+            rejectUnauthorized: true,
+            ca: caPem,
+        };
+        return cfg;
     }
 
-    if (ssl) cfg.ssl = ssl;
+    // Prioridad 2: PGSSL_CA (ruta de fichero) por si algún día lo usas
+    const caPath = process.env.PGSSL_CA || process.env.PGSSLROOTCERT;
+    if (caPath) {
+        try {
+            const ca = fs.readFileSync(caPath, "utf8");
+            cfg.ssl = { rejectUnauthorized: true, ca };
+            return cfg;
+        } catch (e) {
+            console.warn("No pude leer CA en", caPath, e.message);
+        }
+    }
+
+    // Prioridad 3: si la URL trae sslmode=require, habilita SSL sin verificación (salida de emergencia)
+    if (url && /sslmode=require/i.test(url)) {
+        cfg.ssl = { rejectUnauthorized: false };
+        return cfg;
+    }
+
+    // Sin SSL por defecto (solo si nada lo pide)
     return cfg;
 }
 
-const pool = new Pool(buildConfig());
+const pool = new Pool(getConfigFromEnv());
 
 pool.on("error", (err) => {
     console.error("Postgres pool error:", err);
