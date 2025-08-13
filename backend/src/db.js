@@ -17,7 +17,7 @@ try {
 } catch {
     console.log("[db] No CA file found — running without custom CA (ssl disabled for local).");
 }
-
+console.log(`[db] Ssl: ${ssl}`)
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl, // si hay CA => verify-full; si no => false (local)
