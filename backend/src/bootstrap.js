@@ -73,6 +73,18 @@ async function bootstrap() {
             closing_price NUMERIC(18, 8) NOT NULL
         );
     `);
+    await db.query(`
+        CREATE TABLE IF NOT EXISTS price_update_runs
+        (
+            id              bigserial PRIMARY KEY,
+            run_date        date NOT NULL UNIQUE,
+            started_at      timestamptz NOT NULL DEFAULT now(),
+            finished_at     timestamptz,
+            status          text NOT NULL CHECK (status IN ('pending','ok','error')),
+            updated_count   integer DEFAULT 0,
+            details         jsonb
+        );
+    `);
     await recomputeCurrentAssets();
 }
 
