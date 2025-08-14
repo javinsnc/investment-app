@@ -75,7 +75,7 @@ function groupBy(arr, keyFn) {
 
 /**
  * Construye cantidades acumuladas por fecha para cada ticker
- * ops: [{ticker, op_date, side, quantity}]
+ * ops: [{ticker, op_date, operation_type, quantity}]
  * dates: array de YYYY-MM-DD ordenadas
  * return: Map<ticker, Map<isoDate, qty>>
  */
@@ -90,7 +90,7 @@ function buildCumQuantities(ops, dates) {
         let cum = 0;
         const cumByDate = new Map(); // solo días con evento
         for (const o of list) {
-            const delta = o.side === "SELL" ? -Number(o.quantity) : Number(o.quantity);
+            const delta = o.operation_type === "sell" ? -Number(o.quantity) : Number(o.quantity);
             cum += delta;
             const iso = toISO(startOfDay(new Date(o.op_date)));
             cumByDate.set(iso, cum);
@@ -144,7 +144,7 @@ async function getUniverseTickers(explicitTickers) {
 async function getOps(tickers, endISO) {
     // Traemos TODO hasta endISO para calcular acumulado
     const { rows } = await db.query(
-        `SELECT ticker, op_date::date AS op_date, side, quantity
+        `SELECT ticker, op_date::date AS op_date, operation_type, quantity
      FROM operations
      WHERE ticker = ANY($1) AND op_date::date <= $2::date
      ORDER BY op_date ASC`,

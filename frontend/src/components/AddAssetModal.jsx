@@ -46,7 +46,7 @@ export default function AddAssetModal({ open, onClose, onSaved }) {
                 name: form.name,
                 ticker: form.ticker,
                 asset_type: form.asset_type,
-                side: "BUY",
+                operation_type: "buy",
                 op_date: form.op_date,
                 price,
                 quantity: qty,

@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import api from "../utils/api";
 import { fmtCurrency, fmtNumber, formatByType } from "../utils/format";
 import { t } from "../utils/i18n";
-import { FaPlus, FaMinus, FaSyncAlt } from "react-icons/fa";
+import { FaPlus, FaMinus, FaSyncAlt, FaFileImport } from "react-icons/fa";
 
 function parseLocaleNumber(input) {
     if (input == null || input === "") return null;
@@ -11,7 +11,7 @@ function parseLocaleNumber(input) {
     return Number.isFinite(n) ? n : null;
 }
 
-function InlineForm({ asset, side, onCancel, onSaved }) {
+function InlineForm({ asset, operation_type, onCancel, onSaved }) {
     const [opDate, setOpDate] = useState("");
     const [price, setPrice] = useState("");
     const [qty, setQty] = useState("");
@@ -28,7 +28,7 @@ function InlineForm({ asset, side, onCancel, onSaved }) {
             setMsg({ ok: false, text: t("errorOp") });
             return;
         }
-        if (side === "SELL" && q > Number(asset.quantity)) {
+        if (operation_type === "sell" && q > Number(asset.quantity)) {
             setMsg({ ok: false, text: t("cannotSellMore") });
             return;
         }
@@ -39,7 +39,7 @@ function InlineForm({ asset, side, onCancel, onSaved }) {
                 name: asset.name,
                 ticker: asset.ticker,
                 asset_type: asset.type,
-                side,
+                operation_type: operation_type.toLowerCase(),
                 op_date: opDate,
                 price: p,
                 quantity: q,
@@ -81,7 +81,7 @@ function InlineForm({ asset, side, onCancel, onSaved }) {
                         <button
                             type="submit"
                             disabled={saving}
-                            className={`px-3 py-2 rounded text-white ${side === "BUY" ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700"} disabled:opacity-60`}
+                            className={`px-3 py-2 rounded text-white ${operation_type === "buy" ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700"} disabled:opacity-60`}
                         >
                             {saving ? "…" : t("save")}
                         </button>
@@ -99,6 +99,10 @@ export default function AssetsTable({ assets, onChanged, onAdd }) {
     const [updateMsg, setUpdateMsg] = useState({});
     const [updatingAll, setUpdatingAll] = useState(false);
     const [updateAllMsg, setUpdateAllMsg] = useState("");
+
+    // --- Import CSV ---
+    const fileInputRef = useRef(null);
+    const [importing, setImporting] = useState(false);
 
     const openForm = (ticker, m) => {
         setOpenRow(ticker === openRow && mode === m ? null : ticker);
@@ -135,6 +139,29 @@ export default function AssetsTable({ assets, onChanged, onAdd }) {
         } finally {
             setUpdatingAll(false);
             setTimeout(() => setUpdateAllMsg(""), 3000);
+        }
+    };
+
+    const onClickImport = () => fileInputRef.current?.click();
+
+    const handleCsvSelected = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+            setImporting(true);
+            const text = await file.text();
+            await api.post("/api/operations/import", text, {
+                headers: { "Content-Type": "text/csv" },
+            });
+            onChanged?.();
+            alert("CSV imported successfully");
+        } catch (err) {
+            console.error("CSV import error", err);
+            const msg = err?.response?.data?.error || err.message || "Import error";
+            alert(`CSV import error: ${msg}`);
+        } finally {
+            setImporting(false);
+            if (fileInputRef.current) fileInputRef.current.value = "";
         }
     };
 
@@ -209,14 +236,14 @@ export default function AssetsTable({ assets, onChanged, onAdd }) {
                                             <button
                                                 title={t("buy")}
                                                 className="w-8 h-8 flex items-center justify-center rounded text-white bg-green-600 hover:bg-green-700"
-                                                onClick={() => openForm(asset.ticker, "BUY")}
+                                                onClick={() => openForm(asset.ticker, "buy")}
                                             >
                                                 <FaPlus size={12} />
                                             </button>
                                             <button
                                                 title={t("sell")}
                                                 className="w-8 h-8 flex items-center justify-center rounded text-white bg-red-600 hover:bg-red-700"
-                                                onClick={() => openForm(asset.ticker, "SELL")}
+                                                onClick={() => openForm(asset.ticker, "sell")}
                                             >
                                                 <FaMinus size={12} />
                                             </button>
@@ -240,7 +267,7 @@ export default function AssetsTable({ assets, onChanged, onAdd }) {
                                 {isOpen && (
                                     <InlineForm
                                         asset={asset}
-                                        side={mode}
+                                        operation_type={mode}
                                         onCancel={() => setOpenRow(null)}
                                         onSaved={onChanged}
                                     />
@@ -259,18 +286,39 @@ export default function AssetsTable({ assets, onChanged, onAdd }) {
             </div>
 
             <div className="mt-3 flex items-center justify-between">
-                {onAdd ? (
-                    <button
-                        onClick={onAdd}
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded bg-green-600 text-white hover:bg-green-700"
-                    >
-                        <FaPlus size={14} />
-                        {t("add")}
-                    </button>
-                ) : (
-                    <span />
-                )}
+                {/* Izquierda: + Add y Import from csv */}
+                <div className="flex items-center gap-2">
+                    {onAdd ? (
+                        <button
+                            onClick={onAdd}
+                            className="inline-flex items-center gap-2 px-3 py-2 rounded bg-green-600 text-white hover:bg-green-700"
+                        >
+                            <FaPlus size={14} />
+                            {t("add")}
+                        </button>
+                    ) : (
+                        <span />
+                    )}
 
+                    <button
+                        onClick={() => (fileInputRef.current?.click())}
+                        disabled={importing}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-60"
+                        title="Import operations from CSV"
+                    >
+                        <FaFileImport size={14} />
+                        {importing ? "Importing…" : "Import from csv"}
+                    </button>
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".csv,text/csv"
+                        style={{ display: "none" }}
+                        onChange={handleCsvSelected}
+                    />
+                </div>
+
+                {/* Derecha: Update All Prices */}
                 <div className="flex items-center gap-2">
                     {updateAllMsg && <span className="text-sm text-gray-600">{updateAllMsg}</span>}
                     <button

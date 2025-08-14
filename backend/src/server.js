@@ -42,6 +42,7 @@ app.use(
     )
 );
 app.use(express.json());
+app.use(express.text({ type: ['text/csv', 'text/plain'], limit: '10mb' }));
 app.use(morgan("dev"));
 
 // ====== Health ======
@@ -106,21 +107,6 @@ let server;
   server = app.listen(PORT, () => {
     console.log(`Backend listening on port ${PORT}`);
   });
-
-  // 2) Lanza la actualización en background (no bloquea healthcheck)
-  (async () => {
-    try {
-      if (process.env.UPDATE_ON_STARTUP !== "false") {
-        console.log("Running updateLastPrices in background…");
-        const report = await runUpdateLastPrices({ log: console.log });
-        console.log("Initial updateLastPrices result:", report);
-      } else {
-        console.log("UPDATE_ON_STARTUP=false → skipping initial update.");
-      }
-    } catch (e) {
-      console.error("Background updateLastPrices error:", e);
-    }
-  })();
 })();
 
 // ====== Apagado elegante ======
