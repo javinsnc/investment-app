@@ -1,8 +1,8 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route, NavLink } from "react-router-dom";
+import {BrowserRouter as Router, Routes, Route, NavLink} from "react-router-dom";
 import Home from "./pages/Home";
 import Performance from "./pages/Performance";
-import { t } from "./utils/i18n";
+import {t} from "./utils/i18n";
 
 const LinkBase =
     "px-3 py-2 rounded-md text-sm font-medium hover:text-blue-600 hover:bg-blue-50";
@@ -15,7 +15,7 @@ export default function App() {
                 <NavLink
                     to="/"
                     end
-                    className={({ isActive }) =>
+                    className={({isActive}) =>
                         `${LinkBase} ${isActive ? LinkActive : "text-gray-700"}`
                     }
                 >
@@ -23,7 +23,7 @@ export default function App() {
                 </NavLink>
                 <NavLink
                     to="/performance"
-                    className={({ isActive }) =>
+                    className={({isActive}) =>
                         `${LinkBase} ${isActive ? LinkActive : "text-gray-700"}`
                     }
                 >
@@ -33,8 +33,8 @@ export default function App() {
 
             <div className="p-4">
                 <Routes>
-                    <Route path="/" element={<Home />} />
-                    <Route path="/performance" element={<Performance />} />
+                    <Route path="/" element={<Home/>}/>
+                    <Route path="/performance" element={<Performance/>}/>
                 </Routes>
             </div>
         </Router>

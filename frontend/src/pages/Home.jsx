@@ -1,10 +1,10 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, {useEffect, useState, useCallback} from "react";
 import api from "../utils/api";
 import SummaryCards from "../components/SummaryCards";
 import AssetsTable from "../components/AssetsTable";
 import DistributionPie from "../components/DistributionPie";
 import AddAssetModal from "../components/AddAssetModal";
-import { t } from "../utils/i18n";
+import {t} from "../utils/i18n";
 
 export default function Home() {
     const [assets, setAssets] = useState([]);
@@ -41,13 +41,13 @@ export default function Home() {
             {error && <p className="text-red-500">{error}</p>}
 
             {/* Resumen */}
-            <SummaryCards metrics={metrics} />
+            <SummaryCards metrics={metrics}/>
 
             {/* Gráfico de assets (pie) */}
-            <DistributionPie assets={assets} />
+            <DistributionPie assets={assets}/>
 
             {/* Tabla de assets con fila de acciones (+ Add izquierda, Update derecha) */}
-            <AssetsTable assets={assets} onChanged={loadAll} onAdd={() => setShowAdd(true)} />
+            <AssetsTable assets={assets} onChanged={loadAll} onAdd={() => setShowAdd(true)}/>
 
             {/* Modal para añadir nuevo asset */}
             <AddAssetModal

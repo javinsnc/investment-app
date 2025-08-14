@@ -1,8 +1,8 @@
-import React, { useState, useRef } from "react";
+import React, {useState, useRef} from "react";
 import api from "../utils/api";
-import { fmtCurrency, fmtNumber, formatByType } from "../utils/format";
-import { t } from "../utils/i18n";
-import { FaPlus, FaMinus, FaSyncAlt, FaFileImport } from "react-icons/fa";
+import {fmtCurrency, fmtNumber, formatByType} from "../utils/format";
+import {t} from "../utils/i18n";
+import {FaPlus, FaMinus, FaSyncAlt, FaFileImport} from "react-icons/fa";
 
 function parseLocaleNumber(input) {
     if (input == null || input === "") return null;
@@ -11,25 +11,25 @@ function parseLocaleNumber(input) {
     return Number.isFinite(n) ? n : null;
 }
 
-function InlineForm({ asset, operation_type, onCancel, onSaved }) {
+function InlineForm({asset, operation_type, onCancel, onSaved}) {
     const [opDate, setOpDate] = useState("");
     const [price, setPrice] = useState("");
     const [qty, setQty] = useState("");
     const [saving, setSaving] = useState(false);
-    const [msg, setMsg] = useState({ ok: null, text: "" });
+    const [msg, setMsg] = useState({ok: null, text: ""});
 
     const submit = async (e) => {
         e.preventDefault();
-        setMsg({ ok: null, text: "" });
+        setMsg({ok: null, text: ""});
 
         const p = parseLocaleNumber(price);
         const q = parseLocaleNumber(qty);
         if (!opDate || p == null || q == null || p <= 0 || q <= 0) {
-            setMsg({ ok: false, text: t("errorOp") });
+            setMsg({ok: false, text: t("errorOp")});
             return;
         }
         if (operation_type === "sell" && q > Number(asset.quantity)) {
-            setMsg({ ok: false, text: t("cannotSellMore") });
+            setMsg({ok: false, text: t("cannotSellMore")});
             return;
         }
 
@@ -44,12 +44,12 @@ function InlineForm({ asset, operation_type, onCancel, onSaved }) {
                 price: p,
                 quantity: q,
             });
-            setMsg({ ok: true, text: t("successOp") });
+            setMsg({ok: true, text: t("successOp")});
             onSaved?.();
             onCancel?.();
         } catch (err) {
             const status = err?.response?.status;
-            setMsg({ ok: false, text: status === 409 ? t("cannotSellMore") : t("errorOp") });
+            setMsg({ok: false, text: status === 409 ? t("cannotSellMore") : t("errorOp")});
         } finally {
             setSaving(false);
         }
@@ -61,15 +61,18 @@ function InlineForm({ asset, operation_type, onCancel, onSaved }) {
                 <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
                     <div className="flex flex-col">
                         <label className="text-xs text-gray-600 mb-1">{t("fieldDate")}</label>
-                        <input type="date" className="border rounded px-2 py-1" value={opDate} onChange={(e) => setOpDate(e.target.value)} required />
+                        <input type="date" className="border rounded px-2 py-1" value={opDate}
+                               onChange={(e) => setOpDate(e.target.value)} required/>
                     </div>
                     <div className="flex flex-col">
                         <label className="text-xs text-gray-600 mb-1">{t("fieldPrice")}</label>
-                        <input className="border rounded px-2 py-1" placeholder="1.234,56" value={price} onChange={(e) => setPrice(e.target.value)} required />
+                        <input className="border rounded px-2 py-1" placeholder="1.234,56" value={price}
+                               onChange={(e) => setPrice(e.target.value)} required/>
                     </div>
                     <div className="flex flex-col">
                         <label className="text-xs text-gray-600 mb-1">{t("fieldQty")}</label>
-                        <input className="border rounded px-2 py-1" placeholder="100" value={qty} onChange={(e) => setQty(e.target.value)} required />
+                        <input className="border rounded px-2 py-1" placeholder="100" value={qty}
+                               onChange={(e) => setQty(e.target.value)} required/>
                     </div>
 
                     {msg.text && (
@@ -77,7 +80,8 @@ function InlineForm({ asset, operation_type, onCancel, onSaved }) {
                     )}
 
                     <div className="ml-auto flex gap-2">
-                        <button type="button" className="px-3 py-2 rounded border" onClick={onCancel}>{t("cancel")}</button>
+                        <button type="button" className="px-3 py-2 rounded border"
+                                onClick={onCancel}>{t("cancel")}</button>
                         <button
                             type="submit"
                             disabled={saving}
@@ -92,7 +96,7 @@ function InlineForm({ asset, operation_type, onCancel, onSaved }) {
     );
 }
 
-export default function AssetsTable({ assets, onChanged, onAdd }) {
+export default function AssetsTable({assets, onChanged, onAdd}) {
     const [openRow, setOpenRow] = useState(null);
     const [mode, setMode] = useState(null);
     const [updating, setUpdating] = useState({});
@@ -111,19 +115,19 @@ export default function AssetsTable({ assets, onChanged, onAdd }) {
 
     const updatePrice = async (ticker, type) => {
         if (type !== "fund") {
-            setUpdateMsg((m) => ({ ...m, [ticker]: "nf" }));
+            setUpdateMsg((m) => ({...m, [ticker]: "nf"}));
             return;
         }
-        setUpdating((u) => ({ ...u, [ticker]: true }));
-        setUpdateMsg((m) => ({ ...m, [ticker]: "" }));
+        setUpdating((u) => ({...u, [ticker]: true}));
+        setUpdateMsg((m) => ({...m, [ticker]: ""}));
         try {
-            await api.post(`/api/updateLastPrices`, null, { params: { ticker } });
-            setUpdateMsg((m) => ({ ...m, [ticker]: "ok" }));
+            await api.post(`/api/updateLastPrices`, null, {params: {ticker}});
+            setUpdateMsg((m) => ({...m, [ticker]: "ok"}));
             onChanged?.();
         } catch (e) {
-            setUpdateMsg((m) => ({ ...m, [ticker]: "err" }));
+            setUpdateMsg((m) => ({...m, [ticker]: "err"}));
         } finally {
-            setUpdating((u) => ({ ...u, [ticker]: false }));
+            setUpdating((u) => ({...u, [ticker]: false}));
         }
     };
 
@@ -151,7 +155,7 @@ export default function AssetsTable({ assets, onChanged, onAdd }) {
             setImporting(true);
             const text = await file.text();
             await api.post("/api/operations/import", text, {
-                headers: { "Content-Type": "text/csv" },
+                headers: {"Content-Type": "text/csv"},
             });
             onChanged?.();
             alert("CSV imported successfully");
@@ -174,7 +178,9 @@ export default function AssetsTable({ assets, onChanged, onAdd }) {
             const m = String(dt.getMonth() + 1).padStart(2, "0");
             const day = String(dt.getDate()).padStart(2, "0");
             return `${y}-${m}-${day}`;
-        } catch { return String(d); }
+        } catch {
+            return String(d);
+        }
     };
 
     return (
@@ -238,29 +244,32 @@ export default function AssetsTable({ assets, onChanged, onAdd }) {
                                                 className="w-8 h-8 flex items-center justify-center rounded text-white bg-green-600 hover:bg-green-700"
                                                 onClick={() => openForm(asset.ticker, "buy")}
                                             >
-                                                <FaPlus size={12} />
+                                                <FaPlus size={12}/>
                                             </button>
                                             <button
                                                 title={t("sell")}
                                                 className="w-8 h-8 flex items-center justify-center rounded text-white bg-red-600 hover:bg-red-700"
                                                 onClick={() => openForm(asset.ticker, "sell")}
                                             >
-                                                <FaMinus size={12} />
+                                                <FaMinus size={12}/>
                                             </button>
                                             <button
                                                 title={t("updateLastPrice")}
                                                 className={`w-8 h-8 flex items-center justify-center rounded text-white ${
-                                                    asset.type==="fund" ? "bg-blue-600 hover:bg-blue-700" : "bg-gray-400 cursor-not-allowed"
+                                                    asset.type === "fund" ? "bg-blue-600 hover:bg-blue-700" : "bg-gray-400 cursor-not-allowed"
                                                 }`}
-                                                disabled={asset.type!=="fund" || isUpdating}
+                                                disabled={asset.type !== "fund" || isUpdating}
                                                 onClick={() => updatePrice(asset.ticker, asset.type)}
                                             >
-                                                <FaSyncAlt size={12} className={isUpdating ? "animate-spin" : ""} />
+                                                <FaSyncAlt size={12} className={isUpdating ? "animate-spin" : ""}/>
                                             </button>
                                         </div>
-                                        {uMsg === "ok" && <div className="text-xs text-green-600 mt-1">{t("updatedOk")}</div>}
-                                        {uMsg === "err" && <div className="text-xs text-red-600 mt-1">{t("updatedErr")}</div>}
-                                        {uMsg === "nf" && <div className="text-xs text-gray-500 mt-1">{t("onlyFunds")}</div>}
+                                        {uMsg === "ok" &&
+                                            <div className="text-xs text-green-600 mt-1">{t("updatedOk")}</div>}
+                                        {uMsg === "err" &&
+                                            <div className="text-xs text-red-600 mt-1">{t("updatedErr")}</div>}
+                                        {uMsg === "nf" &&
+                                            <div className="text-xs text-gray-500 mt-1">{t("onlyFunds")}</div>}
                                     </td>
                                 </tr>
 
@@ -293,11 +302,11 @@ export default function AssetsTable({ assets, onChanged, onAdd }) {
                             onClick={onAdd}
                             className="inline-flex items-center gap-2 px-3 py-2 rounded bg-green-600 text-white hover:bg-green-700"
                         >
-                            <FaPlus size={14} />
+                            <FaPlus size={14}/>
                             {t("add")}
                         </button>
                     ) : (
-                        <span />
+                        <span/>
                     )}
 
                     <button
@@ -306,14 +315,14 @@ export default function AssetsTable({ assets, onChanged, onAdd }) {
                         className="inline-flex items-center gap-2 px-3 py-2 rounded bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-60"
                         title="Import operations from CSV"
                     >
-                        <FaFileImport size={14} />
+                        <FaFileImport size={14}/>
                         {importing ? "Importing…" : "Import from csv"}
                     </button>
                     <input
                         ref={fileInputRef}
                         type="file"
                         accept=".csv,text/csv"
-                        style={{ display: "none" }}
+                        style={{display: "none"}}
                         onChange={handleCsvSelected}
                     />
                 </div>
@@ -327,7 +336,7 @@ export default function AssetsTable({ assets, onChanged, onAdd }) {
                         className="inline-flex items-center gap-2 px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
                         title={t("updateAllPrices")}
                     >
-                        <FaSyncAlt className={updatingAll ? "animate-spin" : ""} size={14} />
+                        <FaSyncAlt className={updatingAll ? "animate-spin" : ""} size={14}/>
                         {updatingAll ? t("updating") : t("updateAllPrices")}
                     </button>
                 </div>
