@@ -1,7 +1,7 @@
-import React, {useEffect, useMemo, useState} from "react";
+import React, { useEffect, useState } from "react";
 import api from "../utils/api";
-import {t} from "../utils/i18n";
-import {fmtCurrency} from "../utils/format";
+import { t } from "../utils/i18n";
+import { fmtCurrency } from "../utils/format";
 import {
     ResponsiveContainer,
     AreaChart,
@@ -33,8 +33,7 @@ export default function Performance() {
 
     // carga lista de activos para el selector
     useEffect(() => {
-        api.get("/api/assets").then(r => setAssets(r.data || [])).catch(() => {
-        });
+        api.get("/api/assets").then(r => setAssets(r.data || [])).catch(() => {});
     }, []);
 
     // carga serie cuando cambian filtros
@@ -42,16 +41,12 @@ export default function Performance() {
         const run = async () => {
             try {
                 setErr("");
+                const params = { group, start: from, end: to, maxPoints: 100 };
                 if (assetSel === "ALL") {
-                    // Suma ∑(precio * cantidad) de todos los activos
-                    const params = {group, start: from, end: to, maxPoints: 100};
-                    // Si quisieras filtrar por subset de tickers, añade params.tickers = "A,B,C"
-                    const {data} = await api.get("/api/history/portfolio", {params});
+                    const { data } = await api.get("/api/history/portfolio", { params });
                     setSeries(data || []);
                 } else {
-                    // Un solo activo -> valor (precio * cantidad)
-                    const params = {group, start: from, end: to, maxPoints: 100};
-                    const {data} = await api.get(`/api/history/asset/${assetSel}`, {params});
+                    const { data } = await api.get(`/api/history/asset/${assetSel}`, { params });
                     setSeries(data || []);
                 }
             } catch (e) {
@@ -64,6 +59,7 @@ export default function Performance() {
 
     // Eje Y formateado €
     const yTick = (v) => fmtCurrency.format(Number(v) || 0);
+    const controlClass = "h-10 border rounded px-3";
 
     return (
         <div className="space-y-4">
@@ -73,7 +69,7 @@ export default function Performance() {
                 <div className="flex flex-col">
                     <label className="text-xs text-gray-600 mb-1">{t("assetLabel")}</label>
                     <select
-                        className="border rounded px-2 py-1"
+                        className={controlClass}
                         value={assetSel}
                         onChange={(e) => setAssetSel(e.target.value)}
                     >
@@ -87,7 +83,7 @@ export default function Performance() {
                 <div className="flex flex-col">
                     <label className="text-xs text-gray-600 mb-1">{t("timeRange")}</label>
                     <select
-                        className="border rounded px-2 py-1"
+                        className={controlClass}
                         value={group}
                         onChange={(e) => setGroup(e.target.value)}
                     >
@@ -102,7 +98,7 @@ export default function Performance() {
                     <label className="text-xs text-gray-600 mb-1">{t("from")}</label>
                     <input
                         type="date"
-                        className="border rounded px-2 py-1"
+                        className={controlClass}
                         value={from}
                         onChange={(e) => setFrom(e.target.value)}
                     />
@@ -112,7 +108,7 @@ export default function Performance() {
                     <label className="text-xs text-gray-600 mb-1">{t("to")}</label>
                     <input
                         type="date"
-                        className="border rounded px-2 py-1"
+                        className={controlClass}
                         value={to}
                         onChange={(e) => setTo(e.target.value)}
                     />
@@ -124,13 +120,9 @@ export default function Performance() {
             <div className="w-full h-80 bg-white border border-gray-100 rounded-2xl p-3">
                 <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={series}>
-                        <CartesianGrid strokeDasharray="3 3"/>
-                        <XAxis dataKey="date"/>
-                        <YAxis
-                            tickFormatter={yTick}
-                            width={130}
-                            tickMargin={12}
-                        />
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="date" />
+                        <YAxis tickFormatter={yTick} width={130} tickMargin={12} />
                         <Tooltip
                             formatter={(v) => fmtCurrency.format(Number(v) || 0)}
                             labelFormatter={(l) => l}
@@ -138,9 +130,9 @@ export default function Performance() {
                         <Area
                             type="monotone"
                             dataKey="value"
-                            stroke="#1E3A8A"      // azul oscuro (tailwind blue-900)
-                            fill="#3B82F6"        // azul claro (tailwind blue-500)
-                            fillOpacity={0.3}     // más claro aún
+                            stroke="#1E3A8A"
+                            fill="#3B82F6"
+                            fillOpacity={0.3}
                             strokeWidth={2}
                         />
                     </AreaChart>

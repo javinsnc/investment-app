@@ -135,6 +135,26 @@ function buildForwardPrices(prices, dates) {
     return result;
 }
 
+/**
+ * Reagrupar una serie diaria [{date, value}] en week/month/year
+ * tomando **el último valor del bucket** (no suma).
+ */
+function regroupByBucketLast(series, group) {
+    const buckets = new Map(); // key -> { date, value }
+    for (const point of series) {
+        const key = bucketKey(point.date, group);
+        const prev = buckets.get(key);
+        // nos quedamos con el de fecha más reciente dentro del bucket
+        if (!prev || point.date > prev.date) {
+            buckets.set(key, { date: point.date, value: point.value });
+        }
+    }
+    // ordenamos por clave (inicio de bucket) para fechas ascendentes
+    return Array.from(buckets.entries())
+        .sort((a, b) => new Date(a[0]) - new Date(b[0]))
+        .map(([bucketStart, { value }]) => ({ date: bucketStart, value }));
+}
+
 // ---------- consultas mínimas ----------
 async function getUniverseTickers(explicitTickers) {
     if (explicitTickers && explicitTickers.length) return explicitTickers;
@@ -145,9 +165,9 @@ async function getOps(tickers, endISO) {
     // Traemos TODO hasta endISO para calcular acumulado
     const { rows } = await db.query(
         `SELECT ticker, op_date::date AS op_date, operation_type, quantity
-     FROM operations
-     WHERE ticker = ANY($1) AND op_date::date <= $2::date
-     ORDER BY op_date ASC`,
+         FROM operations
+         WHERE ticker = ANY($1) AND op_date::date <= $2::date
+         ORDER BY op_date ASC`,
         [tickers, endISO]
     );
     return rows;
@@ -155,9 +175,9 @@ async function getOps(tickers, endISO) {
 async function getPrices(tickers, endISO) {
     const { rows } = await db.query(
         `SELECT ticker, date::date AS date, closing_price
-     FROM prices
-     WHERE ticker = ANY($1) AND date::date <= $2::date
-     ORDER BY date ASC`,
+         FROM prices
+         WHERE ticker = ANY($1) AND date::date <= $2::date
+         ORDER BY date ASC`,
         [tickers, endISO]
     );
     return rows;
@@ -180,8 +200,8 @@ async function historyPortfolio({ start, end, tickers = [], group = "day", maxPo
     const qtyMap = buildCumQuantities(ops, dates);     // Map<ticker, Map<date, qty>>
     const priceMap = buildForwardPrices(prices, dates); // Map<ticker, Map<date, price>>
 
-    // 5) sumar por fecha
-    const out = [];
+    // 5) sumar por fecha (valor de cartera diario)
+    const daily = [];
     for (const iso of dates) {
         let total = 0;
         for (const t of universe) {
@@ -189,23 +209,17 @@ async function historyPortfolio({ start, end, tickers = [], group = "day", maxPo
             const p = priceMap.get(t)?.get(iso) || 0;
             total += q * p;
         }
-        out.push({ date: iso, value: total });
+        daily.push({ date: iso, value: total });
     }
 
-    // 6) agrupar por bucket (week/month/year)
-    if ((group || "day") !== "day") {
-        const buckets = new Map(); // key -> sum
-        for (const point of out) {
-            const key = bucketKey(point.date, group);
-            buckets.set(key, (buckets.get(key) || 0) + point.value);
-        }
-        const regrouped = Array.from(buckets.entries())
-            .map(([date, value]) => ({ date, value }))
-            .sort((a, b) => new Date(a.date) - new Date(b.date));
+    // 6) agrupar por bucket (week/month/year) tomando el ÚLTIMO valor del periodo
+    const g = (group || "day").toLowerCase();
+    if (g !== "day") {
+        const regrouped = regroupByBucketLast(daily, g);
         return downsample(regrouped, maxPoints);
     }
 
-    return downsample(out, maxPoints);
+    return downsample(daily, maxPoints);
 }
 
 async function historyAsset({ ticker, start, end, group = "day", maxPoints = 100 }) {
@@ -218,24 +232,18 @@ async function historyAsset({ ticker, start, end, group = "day", maxPoints = 100
     const qtyMap = buildCumQuantities(ops, dates).get(ticker) || new Map();
     const priceMap = buildForwardPrices(prices, dates).get(ticker) || new Map();
 
-    const out = dates.map((iso) => ({
+    const daily = dates.map((iso) => ({
         date: iso,
         value: (qtyMap.get(iso) || 0) * (priceMap.get(iso) || 0),
     }));
 
-    if ((group || "day") !== "day") {
-        const buckets = new Map();
-        for (const p of out) {
-            const key = bucketKey(p.date, group);
-            buckets.set(key, (buckets.get(key) || 0) + p.value);
-        }
-        const regrouped = Array.from(buckets.entries())
-            .map(([date, value]) => ({ date, value }))
-            .sort((a, b) => new Date(a.date) - new Date(b.date));
+    const g = (group || "day").toLowerCase();
+    if (g !== "day") {
+        const regrouped = regroupByBucketLast(daily, g);
         return downsample(regrouped, maxPoints);
     }
 
-    return downsample(out, maxPoints);
+    return downsample(daily, maxPoints);
 }
 
 module.exports = { historyPortfolio, historyAsset };
