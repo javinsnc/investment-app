@@ -41,6 +41,7 @@ router.post("/", async (req, res) => {
             }
         }
 
+        const client = await db.pool.connect();
         await client.query("BEGIN");
         await db.query(
             `INSERT INTO operations (name, ticker, asset_type, operation_type, op_date, price, quantity)
