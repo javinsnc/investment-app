@@ -10,6 +10,17 @@ const { insertPriceIfMissing } = require("../services/pricesOnOperation");
  * - Valida que en sell no se venda más que la cantidad disponible en current_assets.
  * - Inserta operación y recalcula current_assets (JS, sin triggers).
  */
+
+router.post("/recomputeCurrentAssets", async (req, res) => {
+    try {
+        await recomputeCurrentAssets();
+        res.json({ ok: true });
+    } catch (e) {
+        console.error("Recalculate current assets error", e);
+        res.status(500).json({ error: "Recalculate current assets error" });
+    }
+});
+
 router.post("/", async (req, res) => {
     try {
         const {name, ticker, asset_type, operation_type, op_date, price, quantity} = req.body || {};

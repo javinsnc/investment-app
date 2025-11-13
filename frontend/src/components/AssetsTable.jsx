@@ -103,6 +103,8 @@ export default function AssetsTable({assets, onChanged, onAdd}) {
     const [updateMsg, setUpdateMsg] = useState({});
     const [updatingAll, setUpdatingAll] = useState(false);
     const [updateAllMsg, setUpdateAllMsg] = useState("");
+    const [reloading, setReloading] = useState(false);   // 👈 NUEVO
+
 
     // --- Import CSV ---
     const fileInputRef = useRef(null);
@@ -166,6 +168,18 @@ export default function AssetsTable({assets, onChanged, onAdd}) {
         } finally {
             setImporting(false);
             if (fileInputRef.current) fileInputRef.current.value = "";
+        }
+    };
+
+    const handleRecomputeCurrentAssets = async () => {
+        setReloading(true);
+        try {
+            await api.post("/api/operations/recomputeCurrentAssets");
+            onChanged?.(); // recargar tabla si hace falta
+        } catch (e) {
+            console.error("Recompute current assets error", e);
+        } finally {
+            setReloading(false);
         }
     };
 
@@ -325,6 +339,15 @@ export default function AssetsTable({assets, onChanged, onAdd}) {
                         style={{display: "none"}}
                         onChange={handleCsvSelected}
                     />
+                    <button
+                        onClick={handleRecomputeCurrentAssets}
+                        disabled={reloading}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded bg-gray-600 text-white hover:bg-gray-700 disabled:opacity-60"
+                        title="Recompute"
+                    >
+                        <FaSyncAlt className={reloading ? "animate-spin" : ""} size={14}/>
+                        {reloading ? "Reloading…" : "Reload all"}
+                    </button>
                 </div>
 
                 {/* Derecha: Update All Prices */}
