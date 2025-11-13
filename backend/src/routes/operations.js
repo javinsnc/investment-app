@@ -18,7 +18,7 @@ router.post("/", async (req, res) => {
             return res.status(400).json({error: "Missing required fields"});
         }
 
-        const operation_typeNorm = String(operation_type).toUpperCase() === "sell" ? "sell" : "buy";
+        const operation_typeNorm = String(operation_type).toLowerCase() === "sell" ? "sell" : "buy";
         const qty = Number(quantity);
         const p = Number(price);
 
