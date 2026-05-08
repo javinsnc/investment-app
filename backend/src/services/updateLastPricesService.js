@@ -15,6 +15,18 @@ function parseDateFlex(s){
     return isNaN(dt2) ? null : startOfDay(dt2);
 }
 
+// "06 may 2026" / "6 sept. 2026" -> Date  (R4 usa meses abreviados en español)
+function parseSpanishDate(s){
+    if(!s) return null;
+    const months = { ene:0, feb:1, mar:2, abr:3, may:4, jun:5, jul:6, ago:7, sep:8, sept:8, oct:9, nov:10, dic:11 };
+    const m = s.toLowerCase().trim().match(/^(\d{1,2})\s+([a-záéí]+)\.?\s+(\d{4})$/);
+    if(!m) return null;
+    const mon = months[m[2].slice(0,4)] ?? months[m[2].slice(0,3)];
+    if(mon == null) return null;
+    const dt = new Date(+m[3], mon, +m[1]);
+    return isNaN(dt) ? null : startOfDay(dt);
+}
+
 // "1.234,56" / "1,234.56" / "1234,56" -> Number
 function parseLocaleNumber(text){
     if(text==null) return null;
@@ -72,6 +84,32 @@ function parseFT(html){
     return { price, date, source:"ft", rawPrice, rawDate };
 }
 
+function parseR4(html){
+    const rePrice = /<span class="value r4-title[^"]*">([^<]+)<\/span>/m;
+    const reDate  = /<div class="date r4-text[^"]*">([^<]+)<\/div>/m;
+    const pm = html.match(rePrice);
+    const dm = html.match(reDate);
+    const rawPrice = pm && pm[1] ? String(pm[1]).replace(/€/g,"").trim() : null;
+    const rawDate  = dm && dm[1] ? String(dm[1]).trim() : null;
+    const price = parseLocaleNumber(rawPrice);
+    const date  = parseSpanishDate(rawDate) || parseDateFlex(rawDate);
+    return { price, date, source:"r4", rawPrice, rawDate };
+}
+
+function parseYCharts(html){
+    const rePrice = /<span class="index-rank-value">([^<]+)<\/span>/m;
+    const reDate  = /<span class="index-info">[\s\S]*?\|&nbsp;\s*([A-Za-z]{3,9}\s+\d{1,2}\s+\d{4})/m;
+    const pm = html.match(rePrice);
+    const dm = html.match(reDate);
+    let rawPrice = pm && pm[1] ? String(pm[1]).trim() : null;
+    const rawDate  = dm && dm[1] ? String(dm[1]).trim() : null;
+    // YCharts usa '.' como decimal — convertir a coma para parseLocaleNumber
+    if(rawPrice != null){ rawPrice = rawPrice.replace(/\./g, ","); }
+    const price = parseLocaleNumber(rawPrice);
+    const date  = parseDateFlex(rawDate);
+    return { price, date, source:"ycharts", rawPrice, rawDate };
+}
+
 // ---------- Servicio principal ----------
 const TOLERANCE_DAYS_BACK = 14; // aceptamos datos hasta 2 semanas hacia atrás
 // A partir de ahora aceptamos fechas **hasta hoy** (no solo “ayer hábil”)
@@ -126,7 +164,7 @@ async function runUpdateLastPrices({ ticker = "", log = console.log } = {}) {
             const isin = String(f.ticker).trim();
             const lastDate = f.last_date ? toISODate(new Date(f.last_date)) : null;
 
-            let qf = null, ft = null;
+            let qf = null, ft = null, r4 = null, yc = null;
             try {
                 const qfURL = `https://www.quefondos.com/es/fondos/ficha/index.html?isin=${encodeURIComponent(isin)}`;
                 const html  = await fetchHTML(qfURL);
@@ -137,13 +175,25 @@ async function runUpdateLastPrices({ ticker = "", log = console.log } = {}) {
                 const html  = await fetchHTML(ftURL);
                 ft = parseFT(html);
             } catch (_e) { ft = null; }
+            try {
+                const r4URL = `https://www.r4.com/productos-inversion/fondos/fichas/${encodeURIComponent(isin)}`;
+                const html  = await fetchHTML(r4URL);
+                r4 = parseR4(html);
+            } catch (_e) { r4 = null; }
+            try {
+                const ycURL = `https://ycharts.com/mutual_funds/M:${encodeURIComponent(isin)}`;
+                const html  = await fetchHTML(ycURL);
+                yc = parseYCharts(html);
+            } catch (_e) { yc = null; }
 
             // Logs de fuentes
             if (qf) log(`[QF] ${isin} date:${qf.date?toISODate(qf.date):'-'} price:${qf.price} rawP:${qf.rawPrice} rawD:${qf.rawDate}`);
             if (ft) log(`[FT] ${isin} date:${ft.date?toISODate(ft.date):'-'} price:${ft.price} rawP:${ft.rawPrice} rawD:${ft.rawDate}`);
+            if (r4) log(`[R4] ${isin} date:${r4.date?toISODate(r4.date):'-'} price:${r4.price} rawP:${r4.rawPrice} rawD:${r4.rawDate}`);
+            if (yc) log(`[YC] ${isin} date:${yc.date?toISODate(yc.date):'-'} price:${yc.price} rawP:${yc.rawPrice} rawD:${yc.rawDate}`);
 
             // Normalizar candidatos válidos
-            const rawCandidates = [qf, ft].filter(Boolean).filter(c => c.price != null && c.date);
+            const rawCandidates = [qf, ft, r4, yc].filter(Boolean).filter(c => c.price != null && c.date);
             const candidates = [];
             for (const c of rawCandidates) {
                 const iso = toISODate(c.date);
