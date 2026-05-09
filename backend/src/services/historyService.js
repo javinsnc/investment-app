@@ -80,24 +80,27 @@ function groupBy(arr, keyFn) {
  * return: Map<ticker, Map<isoDate, qty>>
  */
 function buildCumQuantities(ops, dates) {
-    // Ordenar operaciones por fecha
     ops.sort((a, b) => new Date(a.op_date) - new Date(b.op_date));
     const byT = groupBy(ops, (o) => o.ticker);
+    const firstISO = dates[0];
 
     const result = new Map();
     for (const [ticker, list] of byT.entries()) {
-        // precomputar pares {date, cum}
         let cum = 0;
-        const cumByDate = new Map(); // solo días con evento
+        let preCum = 0; // cumulado al cierre del día anterior a firstISO
+        const cumByDate = new Map();
         for (const o of list) {
             const delta = o.operation_type === "sell" ? -Number(o.quantity) : Number(o.quantity);
             cum += delta;
             const iso = toISO(startOfDay(new Date(o.op_date)));
-            cumByDate.set(iso, cum);
+            if (iso < firstISO) {
+                preCum = cum;
+            } else {
+                cumByDate.set(iso, cum);
+            }
         }
-        // ahora forward-fill a todas las fechas pedidas
         const mapForDates = new Map();
-        let last = 0;
+        let last = preCum;
         for (const iso of dates) {
             if (cumByDate.has(iso)) last = cumByDate.get(iso);
             mapForDates.set(iso, last);
@@ -116,16 +119,23 @@ function buildCumQuantities(ops, dates) {
 function buildForwardPrices(prices, dates) {
     prices.sort((a, b) => new Date(a.date) - new Date(b.date));
     const byT = groupBy(prices, (p) => p.ticker);
+    const firstISO = dates[0];
 
     const result = new Map();
     for (const [ticker, list] of byT.entries()) {
+        let prePrice = 0; // último precio conocido antes de firstISO
         const priceByDate = new Map();
         for (const p of list) {
             const iso = toISO(startOfDay(new Date(p.date)));
-            priceByDate.set(iso, Number(p.closing_price));
+            const val = Number(p.closing_price);
+            if (iso < firstISO) {
+                prePrice = val;
+            } else {
+                priceByDate.set(iso, val);
+            }
         }
         const mapForDates = new Map();
-        let last = 0;
+        let last = prePrice;
         for (const iso of dates) {
             if (priceByDate.has(iso)) last = priceByDate.get(iso);
             mapForDates.set(iso, last);
