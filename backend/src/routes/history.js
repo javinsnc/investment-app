@@ -13,8 +13,9 @@ router.get("/portfolio", async (req, res) => {
         .map((s) => s.trim())
         .filter(Boolean);
     const maxPoints = Number(req.query.maxPoints || 100);
+    const breakdown = String(req.query.breakdown || "").toLowerCase() === "true";
 
-    const data = await historyPortfolio({ start, end, tickers, group, maxPoints });
+    const data = await historyPortfolio({ start, end, tickers, group, maxPoints, breakdown });
     res.json(data);
   } catch (err) {
     console.error("history/portfolio error", err);

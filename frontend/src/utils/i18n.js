@@ -43,6 +43,8 @@ const messages = {
         weeks: "Weeks",
         months: "Months",
         years: "Years",
+        viewPortfolio: "Portfolio (€)",
+        viewFundsPct: "Funds (%)",
 
         // Inline / modal ops
         add: "Add",
@@ -120,6 +122,8 @@ const messages = {
         weeks: "Semanas",
         months: "Meses",
         years: "Años",
+        viewPortfolio: "Cartera (€)",
+        viewFundsPct: "Fondos (%)",
 
         // Inline / modal ops
         add: "Añadir",

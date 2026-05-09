@@ -184,13 +184,13 @@ async function getPrices(tickers, endISO) {
 }
 
 // ---------- API de servicio ----------
-async function historyPortfolio({ start, end, tickers = [], group = "day", maxPoints = 100 }) {
+async function historyPortfolio({ start, end, tickers = [], group = "day", maxPoints = 100, breakdown = false }) {
     // 1) fechas
     const dates = buildDateRange(start, end);
-    if (dates.length === 0) return [];
+    if (dates.length === 0) return breakdown ? { total: [], byTicker: {} } : [];
     // 2) universo de tickers
     const universe = await getUniverseTickers(tickers);
-    if (universe.length === 0) return [];
+    if (universe.length === 0) return breakdown ? { total: [], byTicker: {} } : [];
     // 3) datos crudos
     const [ops, prices] = await Promise.all([
         getOps(universe, dates[dates.length - 1]),
@@ -200,26 +200,46 @@ async function historyPortfolio({ start, end, tickers = [], group = "day", maxPo
     const qtyMap = buildCumQuantities(ops, dates);     // Map<ticker, Map<date, qty>>
     const priceMap = buildForwardPrices(prices, dates); // Map<ticker, Map<date, price>>
 
-    // 5) sumar por fecha (valor de cartera diario)
+    // 5) serie por ticker + suma por fecha
+    const perTickerDaily = new Map(); // ticker -> [{date,value}]
+    if (breakdown) {
+        for (const t of universe) perTickerDaily.set(t, []);
+    }
     const daily = [];
     for (const iso of dates) {
         let total = 0;
         for (const t of universe) {
             const q = qtyMap.get(t)?.get(iso) || 0;
             const p = priceMap.get(t)?.get(iso) || 0;
-            total += q * p;
+            const v = q * p;
+            total += v;
+            if (breakdown) perTickerDaily.get(t).push({ date: iso, value: v });
         }
         daily.push({ date: iso, value: total });
     }
 
     // 6) agrupar por bucket (week/month/year) tomando el ÚLTIMO valor del periodo
     const g = (group || "day").toLowerCase();
-    if (g !== "day") {
-        const regrouped = regroupByBucketLast(daily, g);
-        return downsample(regrouped, maxPoints);
+    const totalSeries = g === "day"
+        ? downsample(daily, maxPoints)
+        : downsample(regroupByBucketLast(daily, g), maxPoints);
+
+    if (!breakdown) return totalSeries;
+
+    // Para el breakdown reagrupamos cada serie con el mismo criterio y, IMPORTANTE,
+    // alineamos las fechas con las de totalSeries para que recharts pueda mergear filas.
+    const targetDates = new Set(totalSeries.map((p) => p.date));
+    const byTicker = {};
+    // Filtrar tickers que NUNCA tienen valor (>0) en el rango: no aportan nada al gráfico.
+    for (const [ticker, series] of perTickerDaily.entries()) {
+        const hasAny = series.some((p) => p.value > 0);
+        if (!hasAny) continue;
+        const grouped = g === "day" ? series : regroupByBucketLast(series, g);
+        const filtered = grouped.filter((p) => targetDates.has(p.date));
+        byTicker[ticker] = filtered;
     }
 
-    return downsample(daily, maxPoints);
+    return { total: totalSeries, byTicker };
 }
 
 async function historyAsset({ ticker, start, end, group = "day", maxPoints = 100 }) {
