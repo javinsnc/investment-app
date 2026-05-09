@@ -45,6 +45,7 @@ const messages = {
         years: "Years",
         viewPortfolio: "Portfolio (€)",
         viewFundsPct: "Funds (%)",
+        fundsInRange: "Funds in range",
 
         // Inline / modal ops
         add: "Add",
@@ -124,6 +125,7 @@ const messages = {
         years: "Años",
         viewPortfolio: "Cartera (€)",
         viewFundsPct: "Fondos (%)",
+        fundsInRange: "Fondos del periodo",
 
         // Inline / modal ops
         add: "Añadir",
