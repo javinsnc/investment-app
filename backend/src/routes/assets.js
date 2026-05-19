@@ -16,9 +16,9 @@ router.get("/", async (_req, res) => {
       )
       SELECT
         ca.id,
-        ca.name,
+        f.name,
         ca.ticker,
-        ca.asset_type AS type,
+        f.asset_type AS type,
         ac.code AS asset_class_code,
         ac.label AS asset_class,
         ca.quantity,
@@ -32,8 +32,9 @@ router.get("/", async (_req, res) => {
                THEN ((lp.closing_price - ca.average_price) / ca.average_price) * 100
           END AS pnl_pct
       FROM current_assets ca
+             JOIN funds f ON f.ticker = ca.ticker
+             LEFT JOIN asset_classes ac ON ac.id = f.asset_class_id
              LEFT JOIN last_price lp ON lp.ticker = ca.ticker
-             LEFT JOIN asset_classes ac ON ac.id = ca.asset_class_id
       ORDER BY ca.ticker;
     `;
     const { rows } = await db.query(q);

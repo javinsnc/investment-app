@@ -139,20 +139,22 @@ async function runUpdateLastPrices({ ticker = "", log = console.log } = {}) {
         if (ticker) {
             const { rows: one } = await db.query(
                 `WITH lp AS (SELECT ticker, MAX(date) md FROM prices GROUP BY ticker)
-         SELECT ca.ticker, ca.name, lp.md AS last_date
+         SELECT ca.ticker, f.name, lp.md AS last_date
          FROM current_assets ca
+         JOIN funds f ON f.ticker = ca.ticker
          LEFT JOIN lp ON lp.ticker = ca.ticker
-         WHERE ca.asset_type='fund' AND ca.ticker=$1`,
+         WHERE f.asset_type='fund' AND ca.ticker=$1`,
                 [ticker]
             );
             rows = one;
         } else {
             const { rows: many } = await db.query(
                 `WITH lp AS (SELECT ticker, MAX(date) md FROM prices GROUP BY ticker)
-         SELECT ca.ticker, ca.name, lp.md AS last_date
+         SELECT ca.ticker, f.name, lp.md AS last_date
          FROM current_assets ca
+         JOIN funds f ON f.ticker = ca.ticker
          LEFT JOIN lp ON lp.ticker = ca.ticker
-         WHERE ca.asset_type='fund' AND (lp.md IS NULL OR lp.md < $1::date)
+         WHERE f.asset_type='fund' AND (lp.md IS NULL OR lp.md < $1::date)
          ORDER BY ca.ticker`,
                 [maxISO] // revisa si falta hoy; si ya tienes hoy, se omitirá (y si no, se intentará mejorar)
             );
