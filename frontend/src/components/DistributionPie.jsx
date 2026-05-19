@@ -40,23 +40,19 @@ function RightLegend({data, colors, total}) {
     );
 }
 
-export default function DistributionPie({assets}) {
-    const distribution = useMemo(() => assets.map(a => ({
-        name: a.ticker,
-        value: Number(a.purchase_price) * Number(a.quantity),
-        type: a.type
-    })), [assets]);
-    const total = useMemo(() => distribution.reduce((acc, d) => acc + (d.value || 0), 0), [distribution]);
+// Reusable pie card. `data` is an array of {name, value}.
+export function PieCard({title, data}) {
+    const total = useMemo(() => data.reduce((acc, d) => acc + (d.value || 0), 0), [data]);
 
     return (
         <div className="bg-white shadow-sm border border-gray-100 p-4 rounded-2xl">
-            <h2 className="text-lg font-semibold mb-2 text-center">{t("distributionByAsset")}</h2>
+            <h2 className="text-lg font-semibold mb-2 text-center">{title}</h2>
             <div className="w-full flex flex-col lg:flex-row items-center gap-6">
                 <div className="w-full lg:w-[65%]">
                     <ResponsiveContainer width="100%" height={360}>
                         <PieChart>
                             <defs>
-                                {distribution.map((_, i) => {
+                                {data.map((_, i) => {
                                     const color = PIE_COLORS[i % PIE_COLORS.length];
                                     const stops = makeGradientStops(color);
                                     const id = `grad-${i}`;
@@ -69,9 +65,9 @@ export default function DistributionPie({assets}) {
                                     );
                                 })}
                             </defs>
-                            <Pie data={distribution} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={140}
+                            <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={140}
                                  paddingAngle={2} isAnimationActive={true} labelLine={false} label={({name}) => name}>
-                                {distribution.map((entry, index) => (
+                                {data.map((entry, index) => (
                                     <Cell key={`cell-${index}`} fill={`url(#grad-${index})`} stroke="rgba(0,0,0,0.06)"
                                           strokeWidth={1}/>
                                 ))}
@@ -80,9 +76,45 @@ export default function DistributionPie({assets}) {
                         </PieChart>
                     </ResponsiveContainer>
                 </div>
-                <div className="w-full lg:w-[35%]"><RightLegend data={distribution} colors={PIE_COLORS} total={total}/>
+                <div className="w-full lg:w-[35%]"><RightLegend data={data} colors={PIE_COLORS} total={total}/>
                 </div>
             </div>
+        </div>
+    );
+}
+
+const costInvested = (a) => Number(a.purchase_price) * Number(a.quantity);
+
+// Sum cost invested grouped by the key returned by keyFn.
+function groupSum(assets, keyFn) {
+    const map = new Map();
+    for (const a of assets) {
+        const key = keyFn(a) || "—";
+        const value = costInvested(a);
+        map.set(key, (map.get(key) || 0) + (Number.isFinite(value) ? value : 0));
+    }
+    return Array.from(map, ([name, value]) => ({name, value}))
+        .sort((x, y) => y.value - x.value);
+}
+
+// Existing chart: one slice per asset (by ticker).
+export default function DistributionPie({assets}) {
+    const data = useMemo(
+        () => assets.map(a => ({name: a.ticker, value: costInvested(a)})),
+        [assets]
+    );
+    return <PieCard title={t("distributionByAsset")} data={data}/>;
+}
+
+// Two charts side by side: by asset_type and by asset_class.
+export function GroupedDistributions({assets}) {
+    const byType = useMemo(() => groupSum(assets, a => a.type), [assets]);
+    const byClass = useMemo(() => groupSum(assets, a => a.asset_class), [assets]);
+
+    return (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <PieCard title={t("distributionByType")} data={byType}/>
+            <PieCard title={t("distributionByClass")} data={byClass}/>
         </div>
     );
 }

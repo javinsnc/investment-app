@@ -19,6 +19,8 @@ router.get("/", async (_req, res) => {
         ca.name,
         ca.ticker,
         ca.asset_type AS type,
+        ac.code AS asset_class_code,
+        ac.label AS asset_class,
         ca.quantity,
         ca.average_price AS purchase_price,
         (ca.average_price * ca.quantity) AS invested,
@@ -31,6 +33,7 @@ router.get("/", async (_req, res) => {
           END AS pnl_pct
       FROM current_assets ca
              LEFT JOIN last_price lp ON lp.ticker = ca.ticker
+             LEFT JOIN asset_classes ac ON ac.id = ca.asset_class_id
       ORDER BY ca.ticker;
     `;
     const { rows } = await db.query(q);

@@ -17,6 +17,7 @@ const messages = {
         name: "Name",
         ticker: "Ticker",
         type: "Type",
+        assetClass: "Asset Class",
         quantity: "Quantity",
         purchasePrice: "Average Cost",
         currentPrice: "Current Price",
@@ -29,6 +30,8 @@ const messages = {
 
         // Distribution
         distributionByAsset: "Distribution by Asset (Cost Invested)",
+        distributionByType: "Distribution by Type (Cost Invested)",
+        distributionByClass: "Distribution by Asset Class (Cost Invested)",
         invested: "Invested:",
         ofPortfolio: "% of portfolio:",
 
@@ -97,6 +100,7 @@ const messages = {
         name: "Nombre",
         ticker: "Ticker",
         type: "Tipo",
+        assetClass: "Clase de activo",
         quantity: "Cantidad",
         purchasePrice: "Coste medio",
         currentPrice: "Precio actual",
@@ -109,6 +113,8 @@ const messages = {
 
         // Distribución
         distributionByAsset: "Distribución por activo (coste invertido)",
+        distributionByType: "Distribución por tipo (coste invertido)",
+        distributionByClass: "Distribución por clase de activo (coste invertido)",
         invested: "Inversión:",
         ofPortfolio: "% cartera:",
 

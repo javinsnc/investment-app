@@ -206,6 +206,7 @@ export default function AssetsTable({assets, onChanged, onAdd}) {
                         <th className="text-left p-2 font-semibold text-base whitespace-nowrap">{t("name")}</th>
                         <th className="text-left p-2 font-semibold text-base whitespace-nowrap">{t("ticker")}</th>
                         <th className="text-left p-2 font-semibold text-base whitespace-nowrap">{t("type")}</th>
+                        <th className="text-left p-2 font-semibold text-base whitespace-nowrap">{t("assetClass")}</th>
                         <th className="text-right p-2 font-semibold text-base whitespace-nowrap">{t("quantity")}</th>
                         <th className="text-right p-2 font-semibold text-base whitespace-nowrap">{t("purchasePrice")}</th>
                         <th className="text-right p-2 font-semibold text-base whitespace-nowrap">{t("currentPrice")}</th>
@@ -239,6 +240,7 @@ export default function AssetsTable({assets, onChanged, onAdd}) {
                                     <td className="p-2">{asset.name}</td>
                                     <td className="p-2">{asset.ticker}</td>
                                     <td className="p-2">{asset.type}</td>
+                                    <td className="p-2">{asset.asset_class || "—"}</td>
                                     <td className="p-2 text-right">{fmtNumber.format(qty)}</td>
                                     <td className="p-2 text-right">{formatByType(asset.type, price)}</td>
                                     <td className="p-2 text-right">{currentPrice != null ? formatByType(asset.type, currentPrice) : "—"}</td>

@@ -2,7 +2,7 @@ import React, {useEffect, useState, useCallback} from "react";
 import api from "../utils/api";
 import SummaryCards from "../components/SummaryCards";
 import AssetsTable from "../components/AssetsTable";
-import DistributionPie from "../components/DistributionPie";
+import DistributionPie, {GroupedDistributions} from "../components/DistributionPie";
 import AddAssetModal from "../components/AddAssetModal";
 import {t} from "../utils/i18n";
 
@@ -45,6 +45,9 @@ export default function Home() {
 
             {/* Gráfico de assets (pie) */}
             <DistributionPie assets={assets}/>
+
+            {/* Gráficos por tipo y por clase de activo */}
+            <GroupedDistributions assets={assets}/>
 
             {/* Tabla de assets con fila de acciones (+ Add izquierda, Update derecha) */}
             <AssetsTable assets={assets} onChanged={loadAll} onAdd={() => setShowAdd(true)}/>
