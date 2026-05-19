@@ -43,7 +43,7 @@ app.use(
 );
 app.use(express.json());
 app.use(express.text({ type: ['text/csv', 'text/plain'], limit: '10mb' }));
-app.use(morgan("dev"));
+app.use(morgan("combined")); // incluye remote-addr y user-agent (para identificar el origen de las peticiones)
 
 // ====== Health ======
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
